@@ -1,1 +1,4 @@
-
+telethone
+colorama
+pyfiglet
+requests
