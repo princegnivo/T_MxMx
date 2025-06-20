@@ -45,7 +45,7 @@ def clear_screen():
 
 clear_screen()
 banner()
-print(f'  {r}Version: {w}1.1 {r}| Author: {w}Shabani{rs}\n')
+print(f'  {r}Version: {w}1.1 {r}| Author: {w}PrinceMxMx{rs}\n')
 
 # Check and create necessary directories
 os.makedirs('sessions', exist_ok=True)
