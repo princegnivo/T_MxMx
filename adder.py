@@ -120,16 +120,38 @@ time.sleep(2)
 clr()
 number = len(accounts)
 print(f'{info}{lg} Total accounts: {w}{number}')
-print(f'{info}{lg} If you have more than 10 accounts then it is recommended to use 10 at a time')
+print(f'{info}{lg} Available accounts:')
+for i, acc in enumerate(accounts, 1):
+    print(f'{w}[{i}] {cy}Phone: {w}{acc[2]} {cy}API ID: {w}{acc[0]}')
+
+print(f'\n{info}{lg} If you have more than 10 accounts then it is recommended to use 10 at a time')
 a = int(input(f'{plus}{lg} Enter number of accounts to use: {r}'))
-to_use = []
+
+selected_accounts = []
+if a == 1:
+    acc_num = int(input(f'{plus}{lg} Enter account number to use: {r}')) - 1
+    selected_accounts.append(accounts[acc_num])
+else:
+    print(f'{plus}{lg} Enter account numbers separated by space (e.g., 1 3 5): {r}')
+    acc_nums = input().split()
+    for num in acc_nums:
+        selected_accounts.append(accounts[int(num)-1])
+
+# Create alt_accounts.csv if needed
+if len(selected_accounts) > 1:
+    with open('alt_accounts.csv', 'w', newline='') as f:
+        writer = csv.writer(f)
+        writer.writerow(['phone', 'api_id', 'api_hash'])
+        for acc in selected_accounts[1:]:  # Skip first account (main account)
+            writer.writerow([acc[2], acc[0], acc[1]])
+
+to_use = selected_accounts
 print(f'\n{info}{lg} Distributing CSV files...{rs}')
 time.sleep(2)
 
-for i in accounts[:a]:
+for i in to_use:
     done = []
-    to_use.append(i)
-    file = 'members/members' + str(accounts.index(i)) + '.csv'
+    file = 'members/members' + str(to_use.index(i)) + '.csv'
     with open(file, 'w', encoding='UTF-8') as f:
         writer = csv.writer(f, delimiter=',', lineterminator='\n')
         writer.writerow(['username', 'user id', 'access hash', 'group', 'group id'])
@@ -155,7 +177,8 @@ if not len(users) == 0:
     print(f'{info}{lg} Remaining {m} users stored in {w}members.csv')
 
 for acc in to_use:
-    accounts.remove(acc)
+    if acc in accounts:
+        accounts.remove(acc)
 
 with open('vars.txt', 'wb') as f:
     for acc in accounts:
@@ -178,16 +201,20 @@ for i in range(5, 0, -1):
     time.sleep(1)
 
 processes = []
-for account in to_use:
-    api_id = str(account[0])
-    api_hash = str(account[1])
-    phone = str(account[2])
-    file = 'members/members' + str(to_use.index(account)) + '.csv'
-    
+main_account = to_use[0]
+api_id = str(main_account[0])
+api_hash = str(main_account[1])
+phone = str(main_account[2])
+file = 'members/members0.csv'
+
+if len(to_use) == 1:
     cmd = ['python', 'usradder.py', api_id, api_hash, phone, file, group, str(scraped_grp)]
-    process = subprocess.Popen(cmd)
-    processes.append(process)
-    print(f'{plus}{lg} Launched from {phone}')
+else:
+    cmd = ['python', 'usradder.py', api_id, api_hash, phone, file, group, str(scraped_grp), 'alt_accounts.csv']
+
+process = subprocess.Popen(cmd)
+processes.append(process)
+print(f'{plus}{lg} Launched main process from {phone}')
 
 # Wait for all processes to complete
 for process in processes:
