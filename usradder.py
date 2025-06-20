@@ -29,7 +29,7 @@ def banner():
     logo = f.renderText('Telegram')
     print(random.choice(colors) + logo + rs)
     print(f'{info}{g} Telegram Adder[USERNAME] V1.1{rs}')
-    print(f'{info}{g} Author: github.com/denizshabani{rs}\n')
+    print(f'{info}{g} Author: t.me/iCloudMxMx{rs}\n')
 
 def clscreen():
     os.system('clear' if os.name != 'nt' else 'cls')
@@ -109,6 +109,15 @@ def initialize_client(phone, api_id, api_hash):
         print(f'{error} Connection error: {str(e)}')
         return None
 
+def get_already_added_users(group_entity):
+    """Get list of users already in the group"""
+    try:
+        participants = client.get_participants(group_entity)
+        return {user.username for user in participants if user.username}
+    except Exception as e:
+        print(f'{error} Error getting group participants: {str(e)}')
+        return set()
+
 users = load_users(file)
 if not users:
     print(f'{error} No valid users found in {file}')
@@ -129,12 +138,24 @@ except Exception as e:
     client.disconnect()
     sys.exit(1)
 
+# Get list of users already in the group
+already_added = get_already_added_users(target_group)
+print(f'{info}{g} Found {len(already_added)} users already in the group{rs}')
+
 n = 0
 added_users = []
 failed_users = []
+skipped_users = []
 
 for user in users:
     n += 1
+    
+    # Skip if user is already in the group
+    if user['username'] in already_added:
+        print(f'{sleep}{cy} Skipping {user["username"]} - already in group{rs}')
+        skipped_users.append(user)
+        continue
+        
     added_users.append(user)
     
     if n % 50 == 0:
@@ -150,8 +171,11 @@ for user in users:
         client(InviteToChannelRequest(entity, [user_to_add]))
         print(f'{attempt}{g} Successfully added {user["username"]}{rs}')
         
-        print(f'{sleep}{g} Sleep 30s{rs}')
-        time.sleep(30)
+        # Add to already_added set to prevent re-adding
+        already_added.add(user['username'])
+        
+        print(f'{sleep}{g} Sleep 5s after adding a user{rs}')
+        time.sleep(5)
         
     except PeerFloodError:
         print(f'{error}{r} Peer Flood Error. Stopping...{rs}')
@@ -184,6 +208,8 @@ if failed_users:
 
 client.disconnect()
 print(f'{info}{g} Adding complete. Processed {len(added_users)} users.{rs}')
+print(f'{info}{cy} Skipped {len(skipped_users)} users already in the group.{rs}')
 if os.name == 'nt':
     input('Press enter to exit...')
 sys.exit(0)
+    
