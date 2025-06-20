@@ -146,6 +146,8 @@ n = 0
 added_users = []
 failed_users = []
 skipped_users = []
+flood_wait = 20  # Initial wait time for flood errors in seconds
+max_flood_wait = 1200  # Maximum wait time (20 minutes)
 
 for user in users:
     n += 1
@@ -162,43 +164,50 @@ for user in users:
         print(f'{sleep}{g} Sleep 2 min to prevent possible account ban{rs}')
         time.sleep(120)
     
-    try:
-        if not user['username']:
+    while True:  # Retry loop for flood errors
+        try:
+            if not user['username']:
+                break
+                
+            print(f'{attempt}{g} Attempting to add {user["username"]}{rs}')
+            user_to_add = client.get_input_entity(user['username'])
+            client(InviteToChannelRequest(entity, [user_to_add]))
+            print(f'{attempt}{g} Successfully added {user["username"]}{rs}')
+            
+            # Add to already_added set to prevent re-adding
+            already_added.add(user['username'])
+            
+            # Reset flood wait time after successful addition
+            flood_wait = 20
+            
+            print(f'{sleep}{g} Sleep 2s after adding a user{rs}')
+            time.sleep(2)
+            break
+            
+        except PeerFloodError as e:
+            print(f'{error}{r} Flood error: {str(e)}. Waiting {flood_wait} seconds...')
+            for remaining in range(flood_wait, 0, -1):
+                print(f'{sleep}{cy} Waiting... {remaining} seconds left.{rs}', end='\r')
+                time.sleep(1)
+            print()  # Move to the next line after countdown
+            flood_wait = min(flood_wait * 2, max_flood_wait)  # Increase wait time
             continue
             
-        print(f'{attempt}{g} Attempting to add {user["username"]}{rs}')
-        user_to_add = client.get_input_entity(user['username'])
-        client(InviteToChannelRequest(entity, [user_to_add]))
-        print(f'{attempt}{g} Successfully added {user["username"]}{rs}')
-        
-        # Add to already_added set to prevent re-adding
-        already_added.add(user['username'])
-        
-        print(f'{sleep}{g} Sleep 5s after adding a user{rs}')
-        time.sleep(5)
-        
-    except PeerFloodError:
-        print(f'{error}{r} Peer Flood Error. Stopping...{rs}')
-        update_list(users, added_users)
-        if users:
-            print(f'{info}{g} Saving remaining users to {file}')
-            Relog(users, file).start()
-        sys.exit(1)
-    except UserPrivacyRestrictedError:
-        print(f'{error}{r} User Privacy Restriction for {user["username"]}{rs}')
-        failed_users.append(user)
-        continue
-    except KeyboardInterrupt:
-        print(f'{error}{r} Aborted by user{rs}')
-        update_list(users, added_users)
-        if users:
-            print(f'{info}{g} Saving remaining users to {file}')
-            Relog(users, file).start()
-        sys.exit(0)
-    except Exception as e:
-        print(f'{error}{r} Error adding {user["username"]}: {str(e)}{rs}')
-        failed_users.append(user)
-        continue
+        except UserPrivacyRestrictedError:
+            print(f'{error}{r} User Privacy Restriction for {user["username"]}{rs}')
+            failed_users.append(user)
+            break
+        except KeyboardInterrupt:
+            print(f'{error}{r} Aborted by user{rs}')
+            update_list(users, added_users)
+            if users:
+                print(f'{info}{g} Saving remaining users to {file}')
+                Relog(users, file).start()
+            sys.exit(0)
+        except Exception as e:
+            print(f'{error}{r} Error adding {user["username"]}: {str(e)}{rs}')
+            failed_users.append(user)
+            break
 
 # Save failed users for retry
 if failed_users:
@@ -212,4 +221,4 @@ print(f'{info}{cy} Skipped {len(skipped_users)} users already in the group.{rs}'
 if os.name == 'nt':
     input('Press enter to exit...')
 sys.exit(0)
-    
+            
