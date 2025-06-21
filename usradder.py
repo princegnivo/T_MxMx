@@ -70,6 +70,44 @@ api_id, api_hash, phone = int(sys.argv[1]), str(sys.argv[2]), str(sys.argv[3])
 input_file, group_link = str(sys.argv[4]), str(sys.argv[5])
 
 # ====================
+# ACCOUNT MANAGEMENT
+# ====================
+class AccountManager:
+    def __init__(self):
+        self.current_account_index = 0
+        self.accounts = []
+        self.flood_errors = 0
+        self.max_flood_errors = 5  # Switch account after 5 flood errors
+        
+    def add_account(self, phone, api_id, api_hash):
+        """Add a new account to the pool"""
+        self.accounts.append({
+            'phone': phone,
+            'api_id': api_id,
+            'api_hash': api_hash
+        })
+    
+    def get_next_account(self):
+        """Get next account in rotation"""
+        if not self.accounts:
+            return None
+        account = self.accounts[self.current_account_index]
+        self.current_account_index = (self.current_account_index + 1) % len(self.accounts)
+        return account
+    
+    def increment_flood_error(self):
+        """Track flood errors and rotate account if needed"""
+        self.flood_errors += 1
+        if self.flood_errors >= self.max_flood_errors:
+            self.flood_errors = 0
+            return self.get_next_account()
+        return None
+
+# Initialize account manager
+account_manager = AccountManager()
+account_manager.add_account(phone, api_id, api_hash)
+
+# ====================
 # DATA HANDLING CLASS
 # ====================
 class UserDatabase:
@@ -187,15 +225,17 @@ print(f'{info}{g} Found {len(current_members)} existing members{rs}')
 # CONFIGURATION
 # ===================
 if is_premium_account:
-    base_delay = 5      # Shorter delay for premium
+    min_delay = 5      # 5 seconds minimum for premium
+    max_delay = 10     # 10 seconds maximum for premium
     flood_factor = 1   # Less aggressive backoff
-    max_delay = 150      # 2.5 minutes maximum
-    batch_size = 100      # Larger batch for premium
+    max_delay_flood = 150  # 2.5 minutes maximum
+    batch_size = 100   # Larger batch for premium
 else:
-    base_delay = 10      # Standard account delay
-    flood_factor = 1.5     # Standard backoff
-    max_delay = 300     # 5 minutes maximum
-    batch_size = 75      # Standard batch size
+    min_delay = 10     # 10 seconds minimum for standard
+    max_delay = 30     # 30 seconds maximum for standard
+    flood_factor = 1.5 # Standard backoff
+    max_delay_flood = 300  # 5 minutes maximum
+    batch_size = 75    # Standard batch size
 
 # ===================
 # PROCESSING LOOP
@@ -204,7 +244,7 @@ total_processed = 0
 success_count = 0
 skip_count = 0
 fail_count = 0
-current_delay = base_delay
+current_delay = random.randint(min_delay, max_delay)  # Initial random delay
 start_time = datetime.now()
 
 for index, user in enumerate(user_data, 1):
@@ -222,6 +262,11 @@ for index, user in enumerate(user_data, 1):
         countdown_timer(120)
         print(f'{attempt}{g} Resuming operations...{rs}')
     
+    # Generate random delay between operations
+    current_delay = random.randint(min_delay, max_delay)
+    print(f'{sleep}{g} Next operation in {current_delay} seconds{rs}')
+    countdown_timer(current_delay)
+    
     # Attempt to add user
     while True:
         try:
@@ -234,20 +279,39 @@ for index, user in enumerate(user_data, 1):
             # Update counts and membership
             success_count += 1
             current_members.add(user['username'])
-            current_delay = base_delay  # Reset delay on success
             
             print(f'{attempt}{g} Successfully added!{rs}')
-            print(f'{sleep}{g} Standard delay: {base_delay}s{rs}')
-            countdown_timer(base_delay)
             break
             
         except PeerFloodError:
             print(f'\n{error}{r} Flood limit reached!{rs}')
-            print(f'{sleep}{ye} Current delay: {current_delay}s{rs}')
-            countdown_timer(current_delay)
             
-            # Exponential backoff
-            current_delay = min(int(current_delay * flood_factor), max_delay)
+            # Check if we need to switch accounts
+            new_account = account_manager.increment_flood_error()
+            if new_account:
+                print(f'{info}{ye} Rotating to next account due to multiple flood errors{rs}')
+                client.disconnect()
+                client, is_premium_account = setup_telegram_client(
+                    new_account['phone'],
+                    new_account['api_id'],
+                    new_account['api_hash']
+                )
+                if not client:
+                    print(f'{error} Failed to switch accounts!')
+                    sys.exit(1)
+                
+                # Update delay parameters for new account type
+                if is_premium_account:
+                    min_delay = 5
+                    max_delay = 10
+                else:
+                    min_delay = 10
+                    max_delay = 30
+            
+            # Calculate new delay with exponential backoff
+            current_delay = min(int(current_delay * flood_factor), max_delay_flood)
+            print(f'{sleep}{ye} New delay: {current_delay}s{rs}')
+            countdown_timer(current_delay)
             continue
             
         except UserPrivacyRestrictedError:
