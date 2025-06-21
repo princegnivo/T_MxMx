@@ -2,6 +2,7 @@ from telethon.sync import TelegramClient
 from telethon.tl.types import InputPeerChannel
 from telethon.errors.rpcerrorlist import PeerFloodError, UserPrivacyRestrictedError, AuthKeyUnregisteredError
 from telethon.tl.functions.channels import InviteToChannelRequest
+from telethon.tl.functions.account import GetAccountTTLRequest
 import sys
 import csv
 import time
@@ -9,9 +10,13 @@ import random
 import pyfiglet
 from colorama import init, Fore
 import os
+from datetime import datetime, timedelta
 
 init()
 
+# ====================
+# COLOR CONFIGURATION
+# ====================
 r = Fore.RED
 g = Fore.GREEN
 rs = Fore.RESET
@@ -23,275 +28,270 @@ info = g + '[' + w + 'i' + g + ']' + rs
 attempt = g + '[' + w + '+' + g + ']' + rs
 sleep = g + '[' + w + '*' + g + ']' + rs
 error = g + '[' + r + '!' + g + ']' + rs
+premium = g + '[' + ye + 'P' + g + ']' + rs
+countdown = g + '[' + w + '>' + g + ']' + rs
 
-def banner():
+# =================
+# CORE FUNCTIONS
+# =================
+def show_banner():
+    """Display the stylized banner"""
     f = pyfiglet.Figlet(font='slant')
     logo = f.renderText('Telegram')
     print(random.choice(colors) + logo + rs)
-    print(f'{info}{g} Telegram Adder[USERNAME] V1.2{rs}')
-    print(f'{info}{g} Author: t.me/iCloudMxMx{rs}\n')
-    print(f'{info}{g} Features:{rs}')
-    print(f'{info}{g} - Account switching after 30 additions{rs}')
-    print(f'{info}{g} - Flood control with exponential backoff{rs}')
-    print(f'{info}{g} - Skip already added users{rs}')
-    print(f'{info}{g} - Session management and error handling{rs}\n')
+    print(f'{info}{g} Telegram Group Adder V2.2 (Ultimate){rs}')
+    print(f'{info}{g} Author: t.me/iCloudMxMx{rs}')
+    print(f'{info}{cy} Premium/Standard Auto-Detect | Flood Protection | Live Counters{rs}\n')
 
-def clscreen():
+def clear_screen():
+    """Clear terminal screen"""
     os.system('clear' if os.name != 'nt' else 'cls')
 
-clscreen()
-banner()
+def countdown_timer(seconds):
+    """Display animated countdown timer"""
+    for remaining in range(seconds, 0, -1):
+        mins, secs = divmod(remaining, 60)
+        time_str = f'{mins:02d}:{secs:02d}'
+        print(f'{countdown} Waiting: {time_str} remaining', end='\r')
+        time.sleep(1)
+    print(' ' * 50, end='\r')  # Clear line
 
-# Input validation
+clear_screen()
+show_banner()
+
+# ====================
+# INPUT VALIDATION
+# ====================
 if len(sys.argv) < 6:
-    print(f'{error} Usage: python usradder.py api_id api_hash phone_number csv_file group_link [alt_accounts_file]')
-    print(f'{info} Note: alt_accounts_file is optional and should contain alternate accounts in CSV format:')
-    print(f'{info}       phone,api_id,api_hash')
+    print(f'{error} Usage: python usradder.py api_id api_hash phone_number csv_file group_link')
     sys.exit(1)
 
-api_id = int(sys.argv[1])
-api_hash = str(sys.argv[2])
-phone = str(sys.argv[3])
-file = str(sys.argv[4])
-group = str(sys.argv[5])
-alt_accounts_file = sys.argv[6] if len(sys.argv) > 6 else None
+api_id, api_hash, phone = int(sys.argv[1]), str(sys.argv[2]), str(sys.argv[3])
+input_file, group_link = str(sys.argv[4]), str(sys.argv[5])
 
-class Relog:
-    def __init__(self, lst, filename):
-        self.lst = lst
+# ====================
+# DATA HANDLING CLASS
+# ====================
+class UserDatabase:
+    def __init__(self, user_data, filename):
+        self.user_data = user_data
         self.filename = filename
     
-    def start(self):
+    def save(self):
+        """Save user data to CSV"""
         with open(self.filename, 'w', encoding='UTF-8') as f:
             writer = csv.writer(f, delimiter=",", lineterminator="\n")
             writer.writerow(['username', 'user id', 'access hash', 'group', 'group id'])
-            for user in self.lst:
+            for user in self.user_data:
                 writer.writerow([user['username'], user['user_id'], user['access_hash'], user['group'], user['group_id']])
 
-def load_alt_accounts(filename):
-    if not filename or not os.path.exists(filename):
-        return []
-    
-    accounts = []
-    with open(filename, encoding='UTF-8') as f:
-        reader = csv.reader(f)
-        next(reader, None)  # Skip header if exists
-        for row in reader:
-            if len(row) >= 3:
-                accounts.append({
-                    'phone': row[0],
-                    'api_id': int(row[1]),
-                    'api_hash': row[2]
-                })
-    return accounts
-
-alt_accounts = load_alt_accounts(alt_accounts_file)
-current_account_index = 0
-
-def get_next_account():
-    global current_account_index, phone, api_id, api_hash
-    
-    if not alt_accounts:
-        return None
-    
-    current_account_index = (current_account_index + 1) % len(alt_accounts)
-    account = alt_accounts[current_account_index]
-    
-    phone = account['phone']
-    api_id = account['api_id']
-    api_hash = account['api_hash']
-    
-    return account
-
-def update_list(lst, temp_lst):
-    count = 0
-    while count != len(temp_lst):
-        del lst[0]
-        count += 1
-    return lst
-
-def load_users(filename):
+# ====================
+# LOAD USER DATA
+# ====================
+def load_user_data(filename):
+    """Load users from CSV file"""
     users = []
     with open(filename, encoding='UTF-8') as f:
-        rows = csv.reader(f, delimiter=',', lineterminator='\n')
-        next(rows, None)
-        for row in rows:
-            if len(row) < 5:  # Skip incomplete rows
-                continue
-            user = {
+        reader = csv.reader(f, delimiter=',', lineterminator='\n')
+        next(reader, None)  # Skip header
+        for row in reader:
+            if len(row) < 5: continue  # Skip invalid rows
+            users.append({
                 'username': row[0],
                 'user_id': row[1],
                 'access_hash': row[2],
                 'group': row[3],
                 'group_id': row[4]
-            }
-            users.append(user)
+            })
     return users
 
-def initialize_client(phone, api_id, api_hash):
-    session_path = f'sessions/{phone}'  # Changed to forward slash for cross-platform
+# ====================
+# CLIENT INITIALIZATION
+# ====================
+def setup_telegram_client(phone, api_id, api_hash):
+    """Initialize and authenticate Telegram client"""
+    session_path = f'sessions/{phone}'
     client = TelegramClient(session_path, api_id, api_hash)
     
     try:
         client.connect()
         
         if not client.is_user_authorized():
-            print(f'{info} Session not authorized. Sending code...')
+            print(f'{info} Authentication required. Sending code...')
             client.send_code_request(phone)
             code = input(f'{attempt} Enter verification code: ')
             client.sign_in(phone, code)
         
-        return client
+        # Premium account detection
+        is_premium = False
+        try:
+            account_info = client(GetAccountTTLRequest())
+            if hasattr(account_info, 'days') and account_info.days < 30:
+                is_premium = True
+                print(f'{premium} Premium account detected! Applying optimized settings')
+        except Exception as e:
+            print(f'{error} Account check error: {str(e)}')
+        
+        return client, is_premium
     
     except AuthKeyUnregisteredError:
-        print(f'{error} Auth key not registered. Removing session file...')
+        print(f'{error} Invalid session. Cleaning up...')
         if os.path.exists(f'{session_path}.session'):
             os.remove(f'{session_path}.session')
-        return None
+        return None, False
     except Exception as e:
-        print(f'{error} Connection error: {str(e)}')
-        return None
+        print(f'{error} Connection failed: {str(e)}')
+        return None, False
 
-def get_already_added_users(client, group_entity):
-    """Get list of users already in the group"""
+# ====================
+# GROUP MANAGEMENT
+# ====================
+def get_existing_members(client, group_entity):
+    """Retrieve current group members"""
     try:
         participants = client.get_participants(group_entity)
         return {user.username for user in participants if user.username}
     except Exception as e:
-        print(f'{error} Error getting group participants: {str(e)}')
+        print(f'{error} Group member fetch error: {str(e)}')
         return set()
 
-users = load_users(file)
-if not users:
-    print(f'{error} No valid users found in {file}')
+# ===================
+# MAIN EXECUTION
+# ===================
+user_data = load_user_data(input_file)
+if not user_data:
+    print(f'{error} No valid users found in {input_file}')
     sys.exit(1)
 
-# Initialize first client
-client = initialize_client(phone, api_id, api_hash)
+client, is_premium_account = setup_telegram_client(phone, api_id, api_hash)
 if not client:
-    print(f'{error} Failed to initialize client for {phone}')
+    print(f'{error} Client initialization failed for {phone}')
     sys.exit(1)
 
+# Load target group
 try:
-    target_group = client.get_entity(group)
-    entity = InputPeerChannel(target_group.id, target_group.access_hash)
-    group_name = target_group.title
-    print(f'{info}{g} Adding members to {group_name}{rs}\n')
+    target_group = client.get_entity(group_link)
+    group_entity = InputPeerChannel(target_group.id, target_group.access_hash)
+    group_title = target_group.title
+    print(f'{info}{g} Target group: {group_title}{rs}')
 except Exception as e:
-    print(f'{error} Failed to get group entity: {str(e)}')
+    print(f'{error} Group access error: {str(e)}')
     client.disconnect()
     sys.exit(1)
 
-# Get list of users already in the group
-already_added = get_already_added_users(client, target_group)
-print(f'{info}{g} Found {len(already_added)} users already in the group{rs}')
+# Get existing members
+current_members = get_existing_members(client, target_group)
+print(f'{info}{g} Found {len(current_members)} existing members{rs}')
 
-n = 0
-added_users = []
-failed_users = []
-skipped_users = []
-flood_wait = 20  # Initial wait time for flood errors in seconds
-max_flood_wait = 1200  # Maximum wait time (20 minutes)
-additions_since_last_switch = 0
+# ===================
+# CONFIGURATION
+# ===================
+if is_premium_account:
+    base_delay = 15      # Shorter delay for premium
+    flood_factor = 1.5   # Less aggressive backoff
+    max_delay = 300      # 5 minutes maximum
+    batch_size = 75      # Larger batch for premium
+else:
+    base_delay = 30      # Standard account delay
+    flood_factor = 2     # Standard backoff
+    max_delay = 1200     # 20 minutes maximum
+    batch_size = 50      # Standard batch size
 
-while users:  # Continue until all users are processed
-    user = users[0]
-    n += 1
+# ===================
+# PROCESSING LOOP
+# ===================
+total_processed = 0
+success_count = 0
+skip_count = 0
+fail_count = 0
+current_delay = base_delay
+start_time = datetime.now()
+
+for index, user in enumerate(user_data, 1):
+    total_processed = index
     
-    # Skip if user is already in the group
-    if user['username'] in already_added:
-        print(f'{sleep}{cy} Skipping {user["username"]} - already in group{rs}')
-        skipped_users.append(users.pop(0))
+    # Skip existing members
+    if user['username'] in current_members:
+        print(f'{sleep}{cy} Skipping {user["username"]} (already member){rs}')
+        skip_count += 1
         continue
-        
-    while True:  # Retry loop for flood errors and account switching
+    
+    # Extended break every batch
+    if total_processed % batch_size == 0:
+        print(f'\n{sleep}{g} Batch completed. Taking extended 2-minute break...{rs}')
+        countdown_timer(120)
+        print(f'{attempt}{g} Resuming operations...{rs}')
+    
+    # Attempt to add user
+    while True:
         try:
-            if not user['username']:
-                break
-                
-            print(f'{attempt}{g} Attempting to add {user["username"]}{rs}')
-            user_to_add = client.get_input_entity(user['username'])
-            client(InviteToChannelRequest(entity, [user_to_add]))
-            print(f'{attempt}{g} Successfully added {user["username"]}{rs}')
+            print(f'\n{attempt}{g} Processing user {total_processed}/{len(user_data)}')
+            print(f'{attempt}{g} Username: {user["username"]}{rs}')
             
-            # Add to already_added set to prevent re-adding
-            already_added.add(user['username'])
-            added_users.append(users.pop(0))
-            additions_since_last_switch += 1
+            target_user = client.get_input_entity(user['username'])
+            client(InviteToChannelRequest(group_entity, [target_user]))
             
-            # Reset flood wait time after successful addition
-            flood_wait = 20
+            # Update counts and membership
+            success_count += 1
+            current_members.add(user['username'])
+            current_delay = base_delay  # Reset delay on success
             
-            # Check if we need to switch accounts
-            if additions_since_last_switch >= 30 and alt_accounts:
-                print(f'{info}{cy} Reached 30 additions, switching account...{rs}')
-                client.disconnect()
-                next_account = get_next_account()
-                if next_account:
-                    print(f'{info}{g} Switching to account: {next_account["phone"]}{rs}')
-                    client = initialize_client(next_account['phone'], next_account['api_id'], next_account['api_hash'])
-                    if not client:
-                        print(f'{error} Failed to switch to account {next_account["phone"]}, trying next...')
-                        continue
-                    additions_since_last_switch = 0
-                    # Refresh group entity with new client
-                    target_group = client.get_entity(group)
-                    entity = InputPeerChannel(target_group.id, target_group.access_hash)
-            
-            print(f'{sleep}{g} Sleep 2s after adding a user{rs}')
-            time.sleep(2)
+            print(f'{attempt}{g} Successfully added!{rs}')
+            print(f'{sleep}{g} Standard delay: {base_delay}s{rs}')
+            countdown_timer(base_delay)
             break
             
-        except PeerFloodError as e:
-            print(f'{error}{r} Flood error: {str(e)}. Waiting {flood_wait} seconds...')
-            for remaining in range(flood_wait, 0, -1):
-                print(f'{sleep}{cy} Waiting... {remaining} seconds left.{rs}', end='\r')
-                time.sleep(1)
-            print()  # Move to the next line after countdown
-            flood_wait = min(flood_wait * 2, max_flood_wait)  # Increase wait time
+        except PeerFloodError:
+            print(f'\n{error}{r} Flood limit reached!{rs}')
+            print(f'{sleep}{ye} Current delay: {current_delay}s{rs}')
+            countdown_timer(current_delay)
             
-            # Try switching accounts if available
-            if alt_accounts:
-                print(f'{info}{cy} Trying account switch due to flood error...{rs}')
-                client.disconnect()
-                next_account = get_next_account()
-                if next_account:
-                    print(f'{info}{g} Switching to account: {next_account["phone"]}{rs}')
-                    client = initialize_client(next_account['phone'], next_account['api_id'], next_account['api_hash'])
-                    if client:
-                        additions_since_last_switch = 0
-                        # Refresh group entity with new client
-                        target_group = client.get_entity(group)
-                        entity = InputPeerChannel(target_group.id, target_group.access_hash)
-                        continue
-            
+            # Exponential backoff
+            current_delay = min(int(current_delay * flood_factor), max_delay)
             continue
             
         except UserPrivacyRestrictedError:
-            print(f'{error}{r} User Privacy Restriction for {user["username"]}{rs}')
-            failed_users.append(users.pop(0))
+            print(f'{error}{r} Privacy restriction for {user["username"]}{rs}')
+            fail_count += 1
             break
         except KeyboardInterrupt:
-            print(f'{error}{r} Aborted by user{rs}')
-            if users:
-                print(f'{info}{g} Saving remaining users to {file}')
-                Relog(users, file).start()
+            print(f'\n{error}{r} Process interrupted! Saving progress...{rs}')
+            if user_data:
+                remaining_users = user_data[total_processed-1:]
+                UserDatabase(remaining_users, input_file).save()
+                print(f'{info} Saved {len(remaining_users)} remaining users')
             sys.exit(0)
         except Exception as e:
-            print(f'{error}{r} Error adding {user["username"]}: {str(e)}{rs}')
-            failed_users.append(users.pop(0))
+            print(f'{error}{r} Addition failed: {str(e)}{rs}')
+            fail_count += 1
             break
 
-# Save failed users for retry
-if failed_users:
-    failed_file = f'failed_{os.path.basename(file)}'
-    print(f'{info}{g} Saving {len(failed_users)} failed users to {failed_file}')
-    Relog(failed_users, failed_file).start()
+# ===================
+# FINAL REPORT
+# ===================
+client.disconnect()
+end_time = datetime.now()
+duration = end_time - start_time
 
-if client:
-    client.disconnect()
-print(f'{info}{g} Adding complete. Processed {len(added_users)} users.{rs}')
-print(f'{info}{cy} Skipped {len(skipped_users)} users already in the group.{rs}')
+print(f'\n{info}{g} {"="*50}{rs}')
+print(f'{info}{g} PROCESSING COMPLETED:{rs}')
+print(f'{info}{g} {"-"*50}{rs}')
+print(f'{attempt}{g} Successful additions: {success_count}{rs}')
+print(f'{sleep}{cy} Skipped (existing): {skip_count}{rs}')
+print(f'{error}{r} Failed attempts: {fail_count}{rs}')
+print(f'{info}{g} Total processed: {total_processed}/{len(user_data)}{rs}')
+print(f'{info}{g} {"-"*50}{rs}')
+print(f'{info}{g} Time elapsed: {duration}{rs}')
+print(f'{info}{g} {"="*50}{rs}')
+
+# Save failed users if any
+if fail_count > 0:
+    failed_users = [u for u in user_data if u['username'] not in current_members and u not in user_data[:total_processed]]
+    if failed_users:
+        failure_file = f'failed_{os.path.basename(input_file)}'
+        UserDatabase(failed_users, failure_file).save()
+        print(f'{info} Saved {len(failed_users)} failed attempts to {failure_file}')
+
 if os.name == 'nt':
-    input('Press enter to exit...')
+    input('\nPress ENTER to exit...')
 sys.exit(0)
