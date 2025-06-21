@@ -187,15 +187,15 @@ print(f'{info}{g} Found {len(current_members)} existing members{rs}')
 # CONFIGURATION
 # ===================
 if is_premium_account:
-    base_delay = 15      # Shorter delay for premium
-    flood_factor = 1.5   # Less aggressive backoff
-    max_delay = 300      # 5 minutes maximum
-    batch_size = 75      # Larger batch for premium
+    base_delay = 5      # Shorter delay for premium
+    flood_factor = 1   # Less aggressive backoff
+    max_delay = 150      # 2.5 minutes maximum
+    batch_size = 100      # Larger batch for premium
 else:
-    base_delay = 30      # Standard account delay
-    flood_factor = 2     # Standard backoff
-    max_delay = 1200     # 20 minutes maximum
-    batch_size = 50      # Standard batch size
+    base_delay = 10      # Standard account delay
+    flood_factor = 1.5     # Standard backoff
+    max_delay = 300     # 5 minutes maximum
+    batch_size = 75      # Standard batch size
 
 # ===================
 # PROCESSING LOOP
