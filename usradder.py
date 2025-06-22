@@ -21,6 +21,7 @@ init()
 ACCOUNT_SWITCH_THRESHOLD = 20  # Switch accounts every 20 actions
 MAX_FLOOD_ERRORS = 5           # Flood errors before switch
 CRITICAL_WAIT_TIME = 3600      # 1 hour (switch immediately if wait > this)
+MAX_DELAY = 600                # 10 minutes maximum delay (added missing constant)
 
 # ====================
 # COLOR CONFIGURATION
@@ -47,9 +48,9 @@ def show_banner():
     f = pyfiglet.Figlet(font='slant')
     logo = f.renderText('Telegram')
     print(random.choice(colors) + logo + rs)
-    print(f'{info}{g} Telegram Group Adder V2.5 (Ultimate Pro){rs}')
+    print(f'{info}{g} Telegram Group Adder V2.6 (Ultimate Pro){rs}')
     print(f'{info}{g} Author: t.me/iCloudMxMx{rs}')
-    print(f'{info}{cy} Features: AI Account Switching | Military-Grade Flood Protection | Premium Turbo{rs}\n')
+    print(f'{info}{cy} Features: AI Account Switching | Military Flood Protection | Premium Turbo{rs}\n')
 
 def clear_screen():
     """Clear terminal screen"""
@@ -344,7 +345,7 @@ for index, user in enumerate(user_data, 1):
         if account_manager.handle_flood_error(str(e)):
             continue
         
-        # Adaptive backoff
+        # Adaptive backoff with MAX_DELAY now properly defined
         backoff = min(2 + (account_manager.flood_errors / 2), 5)
         new_delay = min(actual_delay * backoff, MAX_DELAY)
         print(f'{sleep}{ye} Flood protection: Waiting {new_delay:.1f}s{rs}')
