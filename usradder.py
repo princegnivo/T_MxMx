@@ -19,6 +19,7 @@ init()
 # ====================
 ACCOUNT_SWITCH_THRESHOLD = 20  # Switch accounts every 20 actions
 MAX_FLOOD_ERRORS_BEFORE_SWITCH = 5
+MAX_ALLOWED_WAIT_TIME = 3600  # 1 hour (if wait time > this, switch account immediately)
 
 # ====================
 # COLOR CONFIGURATION
@@ -45,9 +46,9 @@ def show_banner():
     f = pyfiglet.Figlet(font='slant')
     logo = f.renderText('Telegram')
     print(random.choice(colors) + logo + rs)
-    print(f'{info}{g} Telegram Group Adder V2.3 (Ultimate Pro){rs}')
+    print(f'{info}{g} Telegram Group Adder V2.4 (Emergency Switch){rs}')
     print(f'{info}{g} Author: t.me/iCloudMxMx{rs}')
-    print(f'{info}{cy} Features: Auto Account Rotation | Flood Protection | Premium Detection{rs}\n')
+    print(f'{info}{cy} Features: Emergency Account Switching | Flood Protection | Premium Detection{rs}\n')
 
 def clear_screen():
     """Clear terminal screen"""
@@ -82,7 +83,8 @@ class AccountManager:
             'api_id': api_id,
             'api_hash': api_hash,
             'client': None,
-            'is_premium': False
+            'is_premium': False,
+            'banned': False
         })
     
     def get_current_account(self):
@@ -92,15 +94,32 @@ class AccountManager:
         return self.accounts[self.current_index]
     
     def rotate_account(self):
-        """Switch to next account in rotation"""
+        """Switch to next available account"""
         if len(self.accounts) <= 1:
             return False
         
-        self.current_index = (self.current_index + 1) % len(self.accounts)
-        self.action_count = 0
-        self.flood_errors = 0
-        print(f'{info}{cy} Rotated to account: {self.get_current_account()["phone"]}{rs}')
-        return True
+        original_index = self.current_index
+        while True:
+            self.current_index = (self.current_index + 1) % len(self.accounts)
+            
+            # Stop if we've checked all accounts
+            if self.current_index == original_index:
+                return False
+                
+            # Skip banned accounts
+            if not self.accounts[self.current_index]['banned']:
+                self.action_count = 0
+                self.flood_errors = 0
+                print(f'{info}{cy} Rotated to account: {self.get_current_account()["phone"]}{rs}')
+                return True
+    
+    def mark_account_banned(self, wait_time):
+        """Mark current account as banned if wait time is excessive"""
+        if wait_time > MAX_ALLOWED_WAIT_TIME:
+            self.accounts[self.current_index]['banned'] = True
+            print(f'{error}{r} Account temporarily banned (wait {wait_time}s). Marked as inactive.{rs}')
+            return True
+        return False
     
     def increment_action(self):
         """Track actions and rotate if threshold reached"""
@@ -313,9 +332,29 @@ for index, user in enumerate(user_data, 1):
             print(f'{attempt}{g} Successfully added!{rs}')
             break
             
-        except PeerFloodError:
-            print(f'\n{error}{r} Flood limit reached!{rs}')
+        except PeerFloodError as e:
+            # Extract wait time from error message
+            wait_time = 0
+            if "A wait of" in str(e):
+                try:
+                    wait_time = int(str(e).split("A wait of ")[1].split(" ")[0])
+                except:
+                    pass
             
+            print(f'\n{error}{r} Flood limit reached! (Wait {wait_time}s){rs}')
+            
+            # Emergency switch if wait time is too long
+            if wait_time > MAX_ALLOWED_WAIT_TIME:
+                if account_manager.mark_account_banned(wait_time):
+                    if not account_manager.rotate_account():
+                        print(f'{error}{r} No available accounts! Stopping...{rs}')
+                        sys.exit(1)
+                    current_account = account_manager.get_current_account()
+                    client = current_account['client']
+                    is_premium = current_account['is_premium']
+                    continue
+            
+            # Normal flood error handling
             if account_manager.increment_flood_error():
                 current_account = account_manager.get_current_account()
                 client = current_account['client']
@@ -359,7 +398,8 @@ print(f'{info}{g} {"-"*50}{rs}')
 print(f'{attempt}{g} Successful additions: {success_count}{rs}')
 print(f'{sleep}{cy} Skipped (existing): {skip_count}{rs}')
 print(f'{error}{r} Failed attempts: {fail_count}{rs}')
-print(f'{info}{g} Accounts used: {len(account_manager.accounts)}{rs}')
+print(f'{info}{g} Active accounts used: {len([a for a in account_manager.accounts if not a["banned"]])}{rs}')
+print(f'{info}{g} Banned accounts: {len([a for a in account_manager.accounts if a["banned"]])}{rs}')
 print(f'{info}{g} Total processed: {total_processed}/{len(user_data)}{rs}')
 print(f'{info}{g} {"-"*50}{rs}')
 print(f'{info}{g} Time elapsed: {duration}{rs}')
