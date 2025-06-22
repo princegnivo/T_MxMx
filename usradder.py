@@ -15,6 +15,12 @@ from datetime import datetime, timedelta
 init()
 
 # ====================
+# CONFIGURATION
+# ====================
+ACCOUNT_SWITCH_THRESHOLD = 20  # Switch accounts every 20 actions
+MAX_FLOOD_ERRORS_BEFORE_SWITCH = 5
+
+# ====================
 # COLOR CONFIGURATION
 # ====================
 r = Fore.RED
@@ -39,9 +45,9 @@ def show_banner():
     f = pyfiglet.Figlet(font='slant')
     logo = f.renderText('Telegram')
     print(random.choice(colors) + logo + rs)
-    print(f'{info}{g} Telegram Group Adder V2.2 (Ultimate){rs}')
+    print(f'{info}{g} Telegram Group Adder V2.3 (Ultimate Pro){rs}')
     print(f'{info}{g} Author: t.me/iCloudMxMx{rs}')
-    print(f'{info}{cy} Premium/Standard Auto-Detect | Flood Protection | Live Counters{rs}\n')
+    print(f'{info}{cy} Features: Auto Account Rotation | Flood Protection | Premium Detection{rs}\n')
 
 def clear_screen():
     """Clear terminal screen"""
@@ -54,10 +60,64 @@ def countdown_timer(seconds):
         time_str = f'{mins:02d}:{secs:02d}'
         print(f'{countdown} Waiting: {time_str} remaining', end='\r')
         time.sleep(1)
-    print(' ' * 50, end='\r')  # Clear line
+    print(' ' * 50, end='\r')
 
 clear_screen()
 show_banner()
+
+# ====================
+# ACCOUNT MANAGEMENT
+# ====================
+class AccountManager:
+    def __init__(self):
+        self.accounts = []
+        self.current_index = 0
+        self.action_count = 0
+        self.flood_errors = 0
+        
+    def add_account(self, phone, api_id, api_hash):
+        """Add a new account to the pool"""
+        self.accounts.append({
+            'phone': phone,
+            'api_id': api_id,
+            'api_hash': api_hash,
+            'client': None,
+            'is_premium': False
+        })
+    
+    def get_current_account(self):
+        """Get current active account"""
+        if not self.accounts:
+            return None
+        return self.accounts[self.current_index]
+    
+    def rotate_account(self):
+        """Switch to next account in rotation"""
+        if len(self.accounts) <= 1:
+            return False
+        
+        self.current_index = (self.current_index + 1) % len(self.accounts)
+        self.action_count = 0
+        self.flood_errors = 0
+        print(f'{info}{cy} Rotated to account: {self.get_current_account()["phone"]}{rs}')
+        return True
+    
+    def increment_action(self):
+        """Track actions and rotate if threshold reached"""
+        self.action_count += 1
+        if self.action_count >= ACCOUNT_SWITCH_THRESHOLD:
+            return self.rotate_account()
+        return False
+    
+    def increment_flood_error(self):
+        """Track flood errors and rotate if needed"""
+        self.flood_errors += 1
+        if self.flood_errors >= MAX_FLOOD_ERRORS_BEFORE_SWITCH:
+            return self.rotate_account()
+        return False
+
+# Initialize account manager
+account_manager = AccountManager()
 
 # ====================
 # INPUT VALIDATION
@@ -66,46 +126,56 @@ if len(sys.argv) < 6:
     print(f'{error} Usage: python usradder.py api_id api_hash phone_number csv_file group_link')
     sys.exit(1)
 
+# Add primary account from command line
 api_id, api_hash, phone = int(sys.argv[1]), str(sys.argv[2]), str(sys.argv[3])
 input_file, group_link = str(sys.argv[4]), str(sys.argv[5])
-
-# ====================
-# ACCOUNT MANAGEMENT
-# ====================
-class AccountManager:
-    def __init__(self):
-        self.current_account_index = 0
-        self.accounts = []
-        self.flood_errors = 0
-        self.max_flood_errors = 5  # Switch account after 5 flood errors
-        
-    def add_account(self, phone, api_id, api_hash):
-        """Add a new account to the pool"""
-        self.accounts.append({
-            'phone': phone,
-            'api_id': api_id,
-            'api_hash': api_hash
-        })
-    
-    def get_next_account(self):
-        """Get next account in rotation"""
-        if not self.accounts:
-            return None
-        account = self.accounts[self.current_account_index]
-        self.current_account_index = (self.current_account_index + 1) % len(self.accounts)
-        return account
-    
-    def increment_flood_error(self):
-        """Track flood errors and rotate account if needed"""
-        self.flood_errors += 1
-        if self.flood_errors >= self.max_flood_errors:
-            self.flood_errors = 0
-            return self.get_next_account()
-        return None
-
-# Initialize account manager
-account_manager = AccountManager()
 account_manager.add_account(phone, api_id, api_hash)
+
+# ====================
+# CLIENT INITIALIZATION
+# ====================
+def setup_telegram_client(account):
+    """Initialize and authenticate Telegram client"""
+    session_path = f'sessions/{account["phone"]}'
+    client = TelegramClient(session_path, account['api_id'], account['api_hash'])
+    
+    try:
+        client.connect()
+        
+        if not client.is_user_authorized():
+            print(f'{info} Authentication required for {account["phone"]}')
+            client.send_code_request(account['phone'])
+            code = input(f'{attempt} Enter verification code: ')
+            client.sign_in(account['phone'], code)
+        
+        # Premium account detection
+        is_premium = False
+        try:
+            account_info = client(GetAccountTTLRequest())
+            if hasattr(account_info, 'days') and account_info.days < 30:
+                is_premium = True
+                print(f'{premium} Premium account detected!')
+        except Exception as e:
+            print(f'{error} Account check error: {str(e)}')
+        
+        account['client'] = client
+        account['is_premium'] = is_premium
+        return True
+    
+    except AuthKeyUnregisteredError:
+        print(f'{error} Invalid session for {account["phone"]}')
+        if os.path.exists(f'{session_path}.session'):
+            os.remove(f'{session_path}.session')
+        return False
+    except Exception as e:
+        print(f'{error} Connection failed: {str(e)}')
+        return False
+
+# Initialize all accounts
+for account in account_manager.accounts:
+    if not setup_telegram_client(account):
+        print(f'{error} Failed to initialize account {account["phone"]}')
+        sys.exit(1)
 
 # ====================
 # DATA HANDLING CLASS
@@ -144,44 +214,6 @@ def load_user_data(filename):
     return users
 
 # ====================
-# CLIENT INITIALIZATION
-# ====================
-def setup_telegram_client(phone, api_id, api_hash):
-    """Initialize and authenticate Telegram client"""
-    session_path = f'sessions/{phone}'
-    client = TelegramClient(session_path, api_id, api_hash)
-    
-    try:
-        client.connect()
-        
-        if not client.is_user_authorized():
-            print(f'{info} Authentication required. Sending code...')
-            client.send_code_request(phone)
-            code = input(f'{attempt} Enter verification code: ')
-            client.sign_in(phone, code)
-        
-        # Premium account detection
-        is_premium = False
-        try:
-            account_info = client(GetAccountTTLRequest())
-            if hasattr(account_info, 'days') and account_info.days < 30:
-                is_premium = True
-                print(f'{premium} Premium account detected! Applying optimized settings')
-        except Exception as e:
-            print(f'{error} Account check error: {str(e)}')
-        
-        return client, is_premium
-    
-    except AuthKeyUnregisteredError:
-        print(f'{error} Invalid session. Cleaning up...')
-        if os.path.exists(f'{session_path}.session'):
-            os.remove(f'{session_path}.session')
-        return None, False
-    except Exception as e:
-        print(f'{error} Connection failed: {str(e)}')
-        return None, False
-
-# ====================
 # GROUP MANAGEMENT
 # ====================
 def get_existing_members(client, group_entity):
@@ -201,41 +233,20 @@ if not user_data:
     print(f'{error} No valid users found in {input_file}')
     sys.exit(1)
 
-client, is_premium_account = setup_telegram_client(phone, api_id, api_hash)
-if not client:
-    print(f'{error} Client initialization failed for {phone}')
-    sys.exit(1)
-
 # Load target group
 try:
-    target_group = client.get_entity(group_link)
+    current_account = account_manager.get_current_account()
+    target_group = current_account['client'].get_entity(group_link)
     group_entity = InputPeerChannel(target_group.id, target_group.access_hash)
     group_title = target_group.title
     print(f'{info}{g} Target group: {group_title}{rs}')
 except Exception as e:
     print(f'{error} Group access error: {str(e)}')
-    client.disconnect()
     sys.exit(1)
 
 # Get existing members
-current_members = get_existing_members(client, target_group)
+current_members = get_existing_members(current_account['client'], target_group)
 print(f'{info}{g} Found {len(current_members)} existing members{rs}')
-
-# ===================
-# CONFIGURATION
-# ===================
-if is_premium_account:
-    min_delay = 5      # 5 seconds minimum for premium
-    max_delay = 10     # 10 seconds maximum for premium
-    flood_factor = 1   # Less aggressive backoff
-    max_delay_flood = 150  # 2.5 minutes maximum
-    batch_size = 100   # Larger batch for premium
-else:
-    min_delay = 10     # 10 seconds minimum for standard
-    max_delay = 30     # 30 seconds maximum for standard
-    flood_factor = 1.5 # Standard backoff
-    max_delay_flood = 300  # 5 minutes maximum
-    batch_size = 75    # Standard batch size
 
 # ===================
 # PROCESSING LOOP
@@ -244,11 +255,25 @@ total_processed = 0
 success_count = 0
 skip_count = 0
 fail_count = 0
-current_delay = random.randint(min_delay, max_delay)  # Initial random delay
 start_time = datetime.now()
 
 for index, user in enumerate(user_data, 1):
     total_processed = index
+    current_account = account_manager.get_current_account()
+    client = current_account['client']
+    is_premium = current_account['is_premium']
+    
+    # Configure delays based on account type
+    if is_premium:
+        min_delay = 5
+        max_delay = 10
+        batch_size = 100
+        max_delay_flood = 150
+    else:
+        min_delay = 10
+        max_delay = 30
+        batch_size = 75
+        max_delay_flood = 300
     
     # Skip existing members
     if user['username'] in current_members:
@@ -262,7 +287,14 @@ for index, user in enumerate(user_data, 1):
         countdown_timer(120)
         print(f'{attempt}{g} Resuming operations...{rs}')
     
-    # Generate random delay between operations
+    # Account rotation every N actions
+    if account_manager.increment_action():
+        current_account = account_manager.get_current_account()
+        client = current_account['client']
+        is_premium = current_account['is_premium']
+        print(f'{info}{cy} Continuing with account: {current_account["phone"]}{rs}')
+    
+    # Random delay between operations
     current_delay = random.randint(min_delay, max_delay)
     print(f'{sleep}{g} Next operation in {current_delay} seconds{rs}')
     countdown_timer(current_delay)
@@ -271,45 +303,26 @@ for index, user in enumerate(user_data, 1):
     while True:
         try:
             print(f'\n{attempt}{g} Processing user {total_processed}/{len(user_data)}')
-            print(f'{attempt}{g} Username: {user["username"]}{rs}')
+            print(f'{attempt}{g} Account: {current_account["phone"]} | User: {user["username"]}{rs}')
             
             target_user = client.get_input_entity(user['username'])
             client(InviteToChannelRequest(group_entity, [target_user]))
             
-            # Update counts and membership
             success_count += 1
             current_members.add(user['username'])
-            
             print(f'{attempt}{g} Successfully added!{rs}')
             break
             
         except PeerFloodError:
             print(f'\n{error}{r} Flood limit reached!{rs}')
             
-            # Check if we need to switch accounts
-            new_account = account_manager.increment_flood_error()
-            if new_account:
-                print(f'{info}{ye} Rotating to next account due to multiple flood errors{rs}')
-                client.disconnect()
-                client, is_premium_account = setup_telegram_client(
-                    new_account['phone'],
-                    new_account['api_id'],
-                    new_account['api_hash']
-                )
-                if not client:
-                    print(f'{error} Failed to switch accounts!')
-                    sys.exit(1)
-                
-                # Update delay parameters for new account type
-                if is_premium_account:
-                    min_delay = 5
-                    max_delay = 10
-                else:
-                    min_delay = 10
-                    max_delay = 30
+            if account_manager.increment_flood_error():
+                current_account = account_manager.get_current_account()
+                client = current_account['client']
+                is_premium = current_account['is_premium']
+                print(f'{info}{cy} Switched to account: {current_account["phone"]}{rs}')
             
-            # Calculate new delay with exponential backoff
-            current_delay = min(int(current_delay * flood_factor), max_delay_flood)
+            current_delay = min(int(current_delay * 1.5), max_delay_flood)
             print(f'{sleep}{ye} New delay: {current_delay}s{rs}')
             countdown_timer(current_delay)
             continue
@@ -333,7 +346,10 @@ for index, user in enumerate(user_data, 1):
 # ===================
 # FINAL REPORT
 # ===================
-client.disconnect()
+for account in account_manager.accounts:
+    if account['client']:
+        account['client'].disconnect()
+
 end_time = datetime.now()
 duration = end_time - start_time
 
@@ -343,6 +359,7 @@ print(f'{info}{g} {"-"*50}{rs}')
 print(f'{attempt}{g} Successful additions: {success_count}{rs}')
 print(f'{sleep}{cy} Skipped (existing): {skip_count}{rs}')
 print(f'{error}{r} Failed attempts: {fail_count}{rs}')
+print(f'{info}{g} Accounts used: {len(account_manager.accounts)}{rs}')
 print(f'{info}{g} Total processed: {total_processed}/{len(user_data)}{rs}')
 print(f'{info}{g} {"-"*50}{rs}')
 print(f'{info}{g} Time elapsed: {duration}{rs}')
