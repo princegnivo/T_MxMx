@@ -21,7 +21,7 @@ init()
 ACCOUNT_SWITCH_THRESHOLD = 20  # Switch accounts every 20 actions
 MAX_FLOOD_ERRORS = 5           # Flood errors before switch
 CRITICAL_WAIT_TIME = 3600      # 1 hour (switch immediately if wait > this)
-MAX_DELAY = 600                # 10 minutes maximum delay (added missing constant)
+MAX_DELAY = 600                # 10 minutes maximum delay
 
 # ====================
 # COLOR CONFIGURATION
@@ -233,7 +233,7 @@ def load_user_data(filename):
             for row in reader:
                 if len(row) >= 5:  # Verify all required fields
                     users.append({
-                        'username': row[0],
+                        'username': row[0].strip() if row[0] else None,  # Clean username
                         'user_id': row[1],
                         'access_hash': row[2],
                         'group': row[3],
@@ -278,13 +278,14 @@ def get_existing_members(client, group_entity):
 current_members = get_existing_members(current_account['client'], group_entity)
 print(f'{info}{g} Found {len(current_members)} existing members{rs}')
 
-# ===================
-# PROCESSING LOOP
-# ===================
+# =================
+# PROCESSING LOOP (FIXED)
+# =================
 total_processed = 0
 success_count = 0
 skip_count = 0
 fail_count = 0
+invalid_count = 0
 start_time = datetime.now()
 
 for index, user in enumerate(user_data, 1):
@@ -297,6 +298,12 @@ for index, user in enumerate(user_data, 1):
     
     client = current_account['client']
     is_premium = current_account['is_premium']
+    
+    # Skip if username is empty
+    if not user['username']:
+        print(f'{sleep}{ye} Skipping empty username at row {index}{rs}')
+        invalid_count += 1
+        continue
     
     # Dynamic configuration
     min_delay = 5 if is_premium else 10
@@ -340,12 +347,21 @@ for index, user in enumerate(user_data, 1):
         account_manager.action_count += 1
         print(f'{attempt}{g} Added successfully!{rs}')
     
+    except (ValueError, TypeError) as e:
+        if "Cannot find any entity" in str(e):
+            print(f'{error}{r} Invalid username: {user["username"]}{rs}')
+            invalid_count += 1
+        else:
+            print(f'{error}{r} Failed to add {user["username"]}: {str(e)}{rs}')
+            fail_count += 1
+        account_manager.update_failure()
+    
     except PeerFloodError as e:
         account_manager.update_failure()
         if account_manager.handle_flood_error(str(e)):
             continue
         
-        # Adaptive backoff with MAX_DELAY now properly defined
+        # Adaptive backoff
         backoff = min(2 + (account_manager.flood_errors / 2), 5)
         new_delay = min(actual_delay * backoff, MAX_DELAY)
         print(f'{sleep}{ye} Flood protection: Waiting {new_delay:.1f}s{rs}')
@@ -366,7 +382,7 @@ for index, user in enumerate(user_data, 1):
         account_manager.update_failure()
 
 # ===================
-# FINAL REPORT
+# FINAL REPORT (UPDATED)
 # ===================
 end_time = datetime.now()
 duration = end_time - start_time
@@ -375,7 +391,8 @@ print(f'\n{info}{g} {"="*60}{rs}')
 print(f'{info}{g} MISSION SUMMARY:{rs}')
 print(f'{info}{g} {"-"*60}{rs}')
 print(f'{attempt}{g} Successes: {success_count} ({success_count/max(1,total_processed):.1%}){rs}')
-print(f'{sleep}{cy} Skipped: {skip_count}{rs}')
+print(f'{sleep}{cy} Skipped: {skip_count} (existing){rs}')
+print(f'{sleep}{ye} Invalid: {invalid_count} (bad usernames){rs}')
 print(f'{error}{r} Failures: {fail_count}{rs}')
 print(f'{info}{g} Processed: {total_processed}/{len(user_data)}{rs}')
 active_accounts = sum(1 for acc in account_manager.accounts if acc['active'])
