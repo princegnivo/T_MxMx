@@ -130,20 +130,31 @@ a = int(input(f'{plus}{lg} Enter number of accounts to use: {r}'))
 selected_accounts = []
 if a == 1:
     acc_num = int(input(f'{plus}{lg} Enter account number to use: {r}')) - 1
-    selected_accounts.append(accounts[acc_num])
+    if 0 <= acc_num < len(accounts):
+        selected_accounts.append(accounts[acc_num])
+    else:
+        print(f'{error} Invalid account number!')
+        sys.exit(1)
 else:
     print(f'{plus}{lg} Enter account numbers separated by space (e.g., 1 3 5): {r}')
-    acc_nums = input().split()
+    acc_nums = list(map(int, input().split()))
     for num in acc_nums:
-        selected_accounts.append(accounts[int(num)-1])
+        if 1 <= num <= len(accounts):
+            selected_accounts.append(accounts[num-1])
+        else:
+            print(f'{error} Invalid account number {num}, skipping')
 
-# Create alt_accounts.csv if needed
+# Create alt_accounts.csv with all selected accounts except the first one
 if len(selected_accounts) > 1:
     with open('alt_accounts.csv', 'w', newline='') as f:
         writer = csv.writer(f)
         writer.writerow(['phone', 'api_id', 'api_hash'])
         for acc in selected_accounts[1:]:  # Skip first account (main account)
             writer.writerow([acc[2], acc[0], acc[1]])
+    print(f'{success} Created alt_accounts.csv with {len(selected_accounts)-1} backup accounts')
+else:
+    # Clear alt_accounts.csv if not needed
+    open('alt_accounts.csv', 'w').close()
 
 to_use = selected_accounts
 print(f'\n{info}{lg} Distributing CSV files...{rs}')
