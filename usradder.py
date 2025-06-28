@@ -36,7 +36,7 @@ def show_banner():
     f = pyfiglet.Figlet(font='slant')
     logo = random.choice(colors) + f.renderText('Telegram') + rs
     print(logo)
-    print(f'{info}{g} Multi-Account Group Adder V4.0 {rs}')
+    print(f'{info}{g} Multi-Account Group Adder V1.1 {rs}')
     print(f'{info}{g} Author: t.me/iCloudMxMx {rs}')
     print(f'{info}{cy} Features: Strict Account Rotation | Military Flood Protection{rs}\n')
 
