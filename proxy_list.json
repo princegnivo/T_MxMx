@@ -1,0 +1,12 @@
+[
+    {
+        "server": "proxy1.example.com",
+        "port": 443,
+        "secret": "abcdef1234567890abcdef1234567890"
+    },
+    {
+        "server": "proxy2.example.com",
+        "port": 443,
+        "secret": "1234567890abcdef1234567890abcdef"
+    }
+]
