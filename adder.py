@@ -41,7 +41,7 @@ def clr():
 
 global scraped_grp
 with open('target_grp.txt', 'r') as f:
-    scraped_grp = f.readline()
+    scraped_grp = f.readline().strip()
 f.close()
 
 clr()
@@ -144,17 +144,13 @@ else:
         else:
             print(f'{error} Invalid account number {num}, skipping')
 
-# Create alt_accounts.csv with all selected accounts except the first one
-if len(selected_accounts) > 1:
-    with open('alt_accounts.csv', 'w', newline='') as f:
-        writer = csv.writer(f)
-        writer.writerow(['phone', 'api_id', 'api_hash'])
-        for acc in selected_accounts[1:]:  # Skip first account (main account)
-            writer.writerow([acc[2], acc[0], acc[1]])
-    print(f'{success} Created alt_accounts.csv with {len(selected_accounts)-1} backup accounts')
-else:
-    # Clear alt_accounts.csv if not needed
-    open('alt_accounts.csv', 'w').close()
+# Create alt_accounts.csv with all selected accounts
+with open('alt_accounts.csv', 'w', newline='') as f:
+    writer = csv.writer(f)
+    writer.writerow(['phone', 'api_id', 'api_hash'])
+    for acc in selected_accounts:  # Include all selected accounts
+        writer.writerow([acc[2], acc[0], acc[1]])
+print(f'{success} Created alt_accounts.csv with {len(selected_accounts)} selected accounts')
 
 to_use = selected_accounts
 print(f'\n{info}{lg} Distributing CSV files...{rs}')
@@ -232,3 +228,4 @@ for process in processes:
     process.wait()
 
 print(f'\n{success}{lg} All processes completed!{rs}')
+        
