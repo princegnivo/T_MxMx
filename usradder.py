@@ -4,7 +4,7 @@ from telethon.tl.types import InputPeerChannel
 from telethon.errors.rpcerrorlist import PeerFloodError, UserPrivacyRestrictedError, FloodWaitError
 from telethon.tl.functions.channels import InviteToChannelRequest
 from telethon.tl.functions.account import GetAccountTTLRequest
-from telethon.network import ConnectionTcpMTProxy
+from telethon.network import ConnectionTcpMTProxyAbridged as ConnectionTcpMTProxy  # Updated import
 import sys
 import csv
 import time
