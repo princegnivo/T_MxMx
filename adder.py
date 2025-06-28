@@ -17,6 +17,7 @@ import subprocess
 
 init()
 
+# Color definitions and banner function remain the same
 r = Fore.RED
 lg = Fore.GREEN
 rs = Fore.RESET
@@ -39,6 +40,7 @@ def banner():
 def clr():
     os.system('clear')
 
+# Load target group
 global scraped_grp
 with open('target_grp.txt', 'r') as f:
     scraped_grp = f.readline().strip()
@@ -46,37 +48,39 @@ f.close()
 
 clr()
 banner()
+
+# Load members
 users = []
 input_file = 'members/members.csv'
 with open(input_file, 'r', encoding='UTF-8') as f:
     reader = csv.reader(f, delimiter=',', lineterminator='\n')
     next(reader, None)
     for row in reader:
-        user = {}
-        user['username'] = row[0]
-        user['user_id'] = row[1]
-        user['access_hash'] = row[2]
-        user['group'] = row[3]
-        user['group_id'] = row[4]
+        user = {
+            'username': row[0],
+            'user_id': row[1],
+            'access_hash': row[2],
+            'group': row[3],
+            'group_id': row[4]
+        }
         users.append(user)
 
+# Load accounts
 accounts = []
-f = open('vars.txt', 'rb')
-while True:
-    try:
-        accounts.append(pickle.load(f))
-    except EOFError:
-        break
-f.close()
+with open('vars.txt', 'rb') as f:
+    while True:
+        try:
+            accounts.append(pickle.load(f))
+        except EOFError:
+            break
 
+# Session creation
 print('\n' + info + lg + ' Creating sessions for all accounts...' + rs)
-for a in accounts:
-    iD = int(a[0])
-    Hash = str(a[1])
-    phn = str(a[2])
+for a in accounts[:]:  # Use slice copy to safely remove during iteration
+    iD, Hash, phn = int(a[0]), str(a[1]), str(a[2])
     clnt = TelegramClient(f'sessions/{phn}', iD, Hash)
     clnt.connect()
-    banned = []
+    
     if not clnt.is_user_authorized():
         try:
             clnt.send_code_request(phn)
@@ -87,39 +91,36 @@ for a in accounts:
                 clnt.sign_in(phn, code)
         except PhoneNumberBannedError:
             print(f'{error}{w}{phn} {r}is banned!{rs}')
-            banned.append(a)
-    for z in banned:
-        accounts.remove(z)
-        print('\n'+info+lg+'Banned account removed'+rs)
-    time.sleep(0.5)
+            accounts.remove(a)
+    
     clnt.disconnect()
+    time.sleep(0.5)
 
-print(info+' Sessions created!')
+print(info + ' Sessions created!')
 time.sleep(2)
+
+# Group joining
 print(f'{plus}{lg} Enter the exact username of the public group{w}[Without @]')
 g = input(f'{INPUT}{lg} Username[Eg: Techmedies_Hub]: {r}')
-group = 't.me/' + str(g)
+group = str(g)  # Removed 't.me/' prefix as per your requested format
 
 print(f'{info}{lg} Joining from all accounts...{rs}')
-for account in accounts:
-    api_id = int(account[0])
-    api_hash = str(account[1])
-    phone = str(account[2])
+for account in accounts[:]:  # Safe iteration with copy
+    api_id, api_hash, phone = int(account[0]), str(account[1]), str(account[2])
     client = TelegramClient(f'sessions/{phone}', api_id, api_hash)
     client.connect()
     try:
-        username = client.get_entity(group)
-        client(JoinChannelRequest(username))
+        client(JoinChannelRequest(group))
         print(f'{success}{lg} Joined from {phone}')
-    except:
-        print(f'{error}{r} Error in joining from {phone}')
+    except Exception as e:
+        print(f'{error}{r} Error joining from {phone}: {str(e)}')
         accounts.remove(account)
     client.disconnect()
 
+# Account selection
 time.sleep(2)
 clr()
-number = len(accounts)
-print(f'{info}{lg} Total accounts: {w}{number}')
+print(f'{info}{lg} Total accounts: {w}{len(accounts)}')
 print(f'{info}{lg} Available accounts:')
 for i, acc in enumerate(accounts, 1):
     print(f'{w}[{i}] {cy}Phone: {w}{acc[2]} {cy}API ID: {w}{acc[0]}')
@@ -144,88 +145,59 @@ else:
         else:
             print(f'{error} Invalid account number {num}, skipping')
 
-# Create alt_accounts.csv with all selected accounts
-with open('alt_accounts.csv', 'w', newline='') as f:
-    writer = csv.writer(f)
-    writer.writerow(['phone', 'api_id', 'api_hash'])
-    for acc in selected_accounts:  # Include all selected accounts
-        writer.writerow([acc[2], acc[0], acc[1]])
-print(f'{success} Created alt_accounts.csv with {len(selected_accounts)} selected accounts')
-
-to_use = selected_accounts
+# CSV distribution
 print(f'\n{info}{lg} Distributing CSV files...{rs}')
 time.sleep(2)
 
-for i in to_use:
-    done = []
-    file = 'members/members' + str(to_use.index(i)) + '.csv'
-    with open(file, 'w', encoding='UTF-8') as f:
+for i, acc in enumerate(selected_accounts):
+    output_file = f'members/members{i}.csv'
+    with open(output_file, 'w', encoding='UTF-8') as f:
         writer = csv.writer(f, delimiter=',', lineterminator='\n')
         writer.writerow(['username', 'user id', 'access hash', 'group', 'group id'])
-        for user in users[:60]:
+        for user in users[:60]:  # Take 60 users per account
             writer.writerow([user['username'], user['user_id'], user['access_hash'], user['group'], user['group_id']])
-            done.append(user)
-    f.close()
-    del_count = 0
-    while del_count != len(done):
-        del users[0]
-        del_count += 1
-    if len(users) == 0:
-        break
+            users.remove(user)  # Remove assigned users
+        print(f'{success} Created {output_file} with 60 users')
 
-if not len(users) == 0:
+# Save remaining users
+if users:
     with open('members/members.csv', 'w', encoding='UTF-8') as f:
         writer = csv.writer(f, delimiter=',', lineterminator='\n')
         writer.writerow(['username', 'user id', 'access hash', 'group', 'group id'])
-        for user in users:
-            writer.writerow([user['username'], user['user_id'], user['access_hash'], user['group'], user['group_id']])
-    f.close()
-    m = str(len(users))
-    print(f'{info}{lg} Remaining {m} users stored in {w}members.csv')
+        writer.writerows([[u['username'], u['user_id'], u['access_hash'], u['group'], u['group_id']] for u in users])
+    print(f'{info}{lg} Remaining {len(users)} users stored in members.csv')
 
-for acc in to_use:
-    if acc in accounts:
-        accounts.remove(acc)
-
+# Update vars.txt
 with open('vars.txt', 'wb') as f:
-    for acc in accounts:
+    remaining_accounts = [acc for acc in accounts if acc not in selected_accounts]
+    for acc in remaining_accounts + selected_accounts:  # Put unused accounts first
         pickle.dump(acc, f)
-    for k in to_use:
-        pickle.dump(k, f)
-    f.close()
 
 print(f'{info}{lg} CSV file distribution complete{rs}')
 time.sleep(2)
 clr()
 
+# Launch usradder.py
 print(f'\n{info}{r} This will be fully automated.')
 print(f'{info}{r} Don\'t touch the device until all processes complete')
 input(f'\n{plus}{lg} Press enter to continue...{rs}')
-print(f'\n{info}{lg} Launching from {len(to_use)} accounts...{rs}\n')
+print(f'\n{info}{lg} Launching from {len(selected_accounts)} accounts...{rs}\n')
 
 for i in range(5, 0, -1):
     print(random.choice(colors) + str(i) + rs)
     time.sleep(1)
 
-processes = []
-main_account = to_use[0]
-api_id = str(main_account[0])
-api_hash = str(main_account[1])
-phone = str(main_account[2])
-file = 'members/members0.csv'
+# Build command according to requested format:
+# python usradder.py api_id1 api_hash1 phone1 api_id2 api_hash2 phone2 csv_file group_link
+cmd = ['python', 'usradder.py']
+for acc in selected_accounts:
+    cmd.extend([str(acc[0]), str(acc[1]), str(acc[2])])  # api_id, api_hash, phone
 
-if len(to_use) == 1:
-    cmd = ['python', 'usradder.py', api_id, api_hash, phone, file, group, str(scraped_grp)]
-else:
-    cmd = ['python', 'usradder.py', api_id, api_hash, phone, file, group, str(scraped_grp), 'alt_accounts.csv']
+# Add CSV file and group link
+cmd.extend(['members/members0.csv', group])
 
+print(f'{plus}{lg} Executing: {" ".join(cmd)}')
 process = subprocess.Popen(cmd)
-processes.append(process)
-print(f'{plus}{lg} Launched main process from {phone}')
+process.wait()
 
-# Wait for all processes to complete
-for process in processes:
-    process.wait()
-
-print(f'\n{success}{lg} All processes completed!{rs}')
-        
+print(f'\n{success}{lg} Process completed!{rs}')
