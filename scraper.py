@@ -11,6 +11,7 @@ from colorama import init, Fore, Style
 from telethon.tl.types import UserStatusRecently, ChannelParticipantsAdmins, UserStatusLastMonth, UserStatusLastWeek, UserStatusOffline, UserStatusOnline
 from time import sleep
 from telethon.tl.functions.channels import GetFullChannelRequest
+import subprocess
 
 # Initialize colorama
 init()
@@ -45,7 +46,7 @@ def clear_screen():
 
 clear_screen()
 banner()
-print(f'  {r}Version: {w}1.1 {r}| Author: {w}PrinceMxMx{rs}\n')
+print(f'  {r}Version: {w}2.0 {r}| Author: {w}PrinceMxMx{rs}\n')
 
 # Check and create necessary directories
 os.makedirs('sessions', exist_ok=True)
@@ -251,3 +252,7 @@ print(f"\n{lg}To transfer files from Termux:{rs}")
 print(f"{cy}1.{lg} termux-setup-storage (to access shared storage)")
 print(f"{cy}2.{lg} cp members/*.csv /sdcard/ (copy to internal storage)")
 print(f"{cy}3.{lg} Or use SCP to transfer over network")
+
+# Launch adder.py instead of exiting
+subprocess.run(["python", "adder.py"])
+                        
