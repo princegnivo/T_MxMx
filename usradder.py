@@ -4,7 +4,6 @@ from telethon.tl.types import InputPeerChannel
 from telethon.errors.rpcerrorlist import PeerFloodError, UserPrivacyRestrictedError, FloodWaitError
 from telethon.tl.functions.channels import InviteToChannelRequest
 from telethon.tl.functions.account import GetAccountTTLRequest
-from telethon.network import ConnectionTcpMTProxyAbridged as ConnectionTcpMTProxy
 import sys
 import csv
 import time
@@ -71,7 +70,7 @@ class AccountManager:
         try:
             with open('proxy_list.json') as f:
                 proxies = json.load(f)
-                return [p for p in proxies if all(k in p for k in ['server', 'port', 'secret'])]
+                return [p for p in proxies if all(k in p for k in ['server', 'port'])]
         except Exception:
             return []
     
@@ -136,12 +135,7 @@ class AccountManager:
         try:
             proxy_config = None
             if proxy:
-                proxy_config = (ConnectionTcpMTProxy, {
-                    'ip': proxy['server'],
-                    'port': proxy['port'],
-                    'dc_id': 4,
-                    'mtproto_secret': bytes.fromhex(proxy['secret'])
-                })
+                proxy_config = (proxy['server'], proxy['port'])
             
             client = TelegramClient(
                 f'sessions/{account["phone"]}',
