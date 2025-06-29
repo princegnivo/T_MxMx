@@ -7,11 +7,18 @@ import random
 import pyfiglet
 import os
 import datetime
-from colorama import init, Fore, Style
-from telethon.tl.types import UserStatusRecently, ChannelParticipantsAdmins, UserStatusLastMonth, UserStatusLastWeek, UserStatusOffline, UserStatusOnline
 from time import sleep
-from telethon.tl.functions.channels import GetFullChannelRequest
 import subprocess
+from colorama import init, Fore, Style
+from telethon.tl.types import (
+    UserStatusRecently,
+    ChannelParticipantsAdmins,
+    UserStatusLastMonth,
+    UserStatusLastWeek,
+    UserStatusOffline,
+    UserStatusOnline
+)
+from telethon.tl.functions.channels import GetFullChannelRequest
 
 # Initialize colorama
 init()
@@ -46,7 +53,7 @@ def clear_screen():
 
 clear_screen()
 banner()
-print(f'  {r}Version: {w}2.0 {r}| Author: {w}PrinceMxMx{rs}\n')
+print(f'  {r}Version: {w}1.1 {r}| Author: {w}PrinceMxMx{rs}\n')
 
 # Check and create necessary directories
 os.makedirs('sessions', exist_ok=True)
@@ -62,7 +69,7 @@ try:
             except EOFError:
                 break
 except FileNotFoundError:
-    print(f"{error} 'vars.txt' not found! Please create it first with your account details.")
+    print(f"{error} 'vars.txt' not found! Please create it first with account details.")
     sys.exit()
 
 if not accs:
@@ -144,7 +151,7 @@ def write_user(writer, group, member):
         writer.writerow([username, member.id, member.access_hash, group.title, group.id, type(member.status).__name__])
 
 # Admin collection
-admin_choice = input(f"{lg}Would you like to have admins on a separate CSV file? {rs}[y/n] {lg}").lower()
+admin_choice = input(f"{lg}Would you like to have admins separately? {rs}[y/n] {lg}").lower()
 if admin_choice == "y":
     try:
         with open("members/admins.csv", "w", encoding='UTF-8') as f:
@@ -253,6 +260,17 @@ print(f"{cy}1.{lg} termux-setup-storage (to access shared storage)")
 print(f"{cy}2.{lg} cp members/*.csv /sdcard/ (copy to internal storage)")
 print(f"{cy}3.{lg} Or use SCP to transfer over network")
 
-# Launch adder.py instead of exiting
-subprocess.run(["python", "adder.py"])
-                        
+# Properly disconnect before launching adder.py
+try:
+    client.disconnect()
+except:
+    pass
+
+# Add delay to ensure clean handoff
+sleep(2)
+
+# Launch adder.py
+try:
+    subprocess.run([sys.executable, "adder.py"])
+except Exception as e:
+    print(f"{error} Failed to launch adder.py: {str(e)}")
