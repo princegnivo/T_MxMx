@@ -5,6 +5,7 @@ import pickle, pyfiglet
 from colorama import init, Fore
 import os, random
 from time import sleep
+import subprocess  # Import subprocess to launch the scraper
 
 init()
 
@@ -14,14 +15,14 @@ cy = Fore.CYAN
 ye = Fore.YELLOW
 r = Fore.RED
 n = Fore.RESET
+flashing_blue = Fore.BLUE + '\033[5m'  # Flashing blue color
 colors = [lg, r, w, cy, ye]
 
 def banner():
     f = pyfiglet.Figlet(font='slant')
     banner = f.renderText('Telegram')
     print(f'{random.choice(colors)}{banner}{n}')
-    print(r+'  Version: 1.1 | Author: PrinceMxMx'+n+'\n')
-
+    print(r+'  Version: 2.0 | Author: PrinceMxMx'+n+'\n')
 
 def clr():
     if os.name == 'nt':
@@ -29,18 +30,20 @@ def clr():
     else:
         os.system('clear')
 
+def launch_scraper():
+    print(f'{lg}Launching scraper...{n}')
+    subprocess.run(['python', 'scraper.py'])  # Launch the scraper.py script
+
 while True:
     clr()
-    #print(r)
     banner()
-    #print(n)
     print(lg+'[1] Add new accounts'+n)
     print(lg+'[2] Filter all banned accounts'+n)
     print(lg+'[3] List out all the accounts'+n)
     print(lg+'[4] Delete specific accounts'+n)
-    #print(lg+'[5] Update your Genisys'+n)
-    print(lg+'[5] Quit')
+    print(flashing_blue+'[5] Launch scraper'+n)  # Change to flashing blue
     a = int(input(f'\nEnter your choice: {r}'))
+    
     if a == 1:
         with open('vars.txt', 'ab') as g:
             newly_added = []
@@ -163,6 +166,7 @@ while True:
         input(f'{lg}Press enter to goto main menu{n}')
         f.close()
     elif a == 5:
-        clr()
-        banner()
-        quit()
+        launch_scraper()  # Launch the scraper
+    else:
+        print(r+'[!] Invalid choice, please try again.'+n)
+    
