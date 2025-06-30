@@ -150,7 +150,6 @@ class AccountManager:
                 code = input(f'{info} Enter code for {account["phone"]}: ')
                 client.sign_in(account['phone'], code)
             
-            # Premium check with fallback
             try:
                 account_ttl = client(GetAccountTTLRequest())
                 account['is_premium'] = account_ttl.days > 7 if hasattr(account_ttl, 'days') else False
@@ -192,19 +191,30 @@ class AccountManager:
 # Initialize account manager
 account_manager = AccountManager()
 
-if len(sys.argv) < 8:
-    print(f'{error} Usage: python usradder.py api_id1 api_hash1 phone1 api_id2 api_hash2 phone2 csv_file group_link')
+# Flexible argument handling
+if len(sys.argv) < 6:
+    print(f'\n{error} Usage:')
+    print(f'{info} Single account: python usradder.py api_id api_hash phone csv_file groupname')
+    print(f'{info} Multiple accounts: python usradder.py api_id1 api_hash1 phone1 api_id2 api_hash2 phone2 csv_file groupname')
     sys.exit(1)
 
-# Process account arguments
-accounts_data = sys.argv[1:-2]
-input_file, group_link = sys.argv[-2], sys.argv[-1]
+# Extract csv_file and group_link
+input_file = sys.argv[-2]
+group_link = sys.argv[-1]
 
-for i in range(0, len(accounts_data), 3):
+# Process account arguments
+account_args = sys.argv[1:-2]
+if len(account_args) % 3 != 0:
+    print(f'{error} Each account requires 3 parameters: api_id api_hash phone')
+    sys.exit(1)
+
+for i in range(0, len(account_args), 3):
     try:
-        api_id, api_hash, phone = accounts_data[i], accounts_data[i+1], accounts_data[i+2]
-        account_manager.add_account(phone, int(api_id), api_hash)
-    except (IndexError, ValueError) as e:
+        api_id = int(account_args[i])
+        api_hash = account_args[i+1]
+        phone = account_args[i+2]
+        account_manager.add_account(phone, api_id, api_hash)
+    except (ValueError, IndexError) as e:
         print(f'{error} Invalid account parameters: {str(e)}')
         sys.exit(1)
 
@@ -253,7 +263,7 @@ for index, user in enumerate(users, 1):
         print(f'{error} NO ACTIVE ACCOUNTS REMAINING!')
         break
     
-    # Check all rotation triggers if multiple accounts available
+    # Only apply rotation logic if multiple accounts available
     if len(account_manager.accounts) > 1:
         rotation_triggers = [
             (account_manager.flood_errors >= MAX_FLOOD_ERRORS, f"{MAX_FLOOD_ERRORS}+ flood errors"),
