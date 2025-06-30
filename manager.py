@@ -1,4 +1,4 @@
-import sys  # Add this import at the top
+import sys
 import requests
 from telethon.sync import TelegramClient
 from telethon.errors.rpcerrorlist import PhoneNumberBannedError
@@ -8,7 +8,6 @@ from colorama import init, Fore
 import os
 import random
 from time import sleep
-import subprocess
 
 # Initialize colorama
 init()
@@ -20,7 +19,6 @@ cy = Fore.CYAN
 ye = Fore.YELLOW
 r = Fore.RED
 n = Fore.RESET
-flashing_blue = Fore.BLUE + '\033[5m'  # Flashing blue color
 colors = [lg, r, w, cy, ye]
 
 def banner():
@@ -35,14 +33,6 @@ def clr():
     else:
         os.system('clear')
 
-def launch_scraper():
-    print(f'{lg}Launching scraper...{n}')
-    try:
-        subprocess.run([sys.executable, 'scraper.py'])  # Launch the scraper.py script
-    except Exception as e:
-        print(f'{r}[!] Error launching scraper: {str(e)}{n}')
-    input(f'\n{lg}Press enter to return to main menu...{n}')
-
 while True:
     clr()
     banner()
@@ -50,7 +40,7 @@ while True:
     print(lg + '[2] Filter all banned accounts' + n)
     print(lg + '[3] List out all the accounts' + n)
     print(lg + '[4] Delete specific accounts' + n)
-    print(flashing_blue + '[5] Launch scraper' + n)
+    print(r + '[5] Exit' + n)
     
     try:
         a = int(input(f'\nEnter your choice: {r}'))
@@ -60,7 +50,6 @@ while True:
         continue
 
     if a == 1:
-        # [Previous implementation for option 1]
         with open('vars.txt', 'ab') as g:
             newly_added = []
             while True:
@@ -90,7 +79,6 @@ while True:
                     print(f'{r}[!] Error: {str(e)}')
 
     elif a == 2:
-        # [Previous implementation for option 2]
         accounts = []
         banned_accs = []
         try:
@@ -138,7 +126,6 @@ while True:
             sleep(2)
 
     elif a == 3:
-        # [Previous implementation for option 3]
         try:
             with open('vars.txt', 'rb') as f:
                 accounts = []
@@ -163,7 +150,6 @@ while True:
             sleep(2)
 
     elif a == 4:
-        # [Previous implementation for option 4]
         try:
             with open('vars.txt', 'rb') as f:
                 accounts = []
@@ -206,7 +192,9 @@ while True:
             sleep(2)
 
     elif a == 5:
-        launch_scraper()
+        print(lg + '\nExiting... Goodbye!' + n)
+        sleep(1)
+        sys.exit(0)
     else:
         print(r + '[!] Invalid choice! (1-5 only)' + n)
         sleep(2)
