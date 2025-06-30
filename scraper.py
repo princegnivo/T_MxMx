@@ -8,7 +8,6 @@ import pyfiglet
 import os
 import datetime
 from time import sleep
-import subprocess
 from colorama import init, Fore, Style
 from telethon.tl.types import (
     UserStatusRecently,
@@ -260,17 +259,8 @@ print(f"{cy}1.{lg} termux-setup-storage (to access shared storage)")
 print(f"{cy}2.{lg} cp members/*.csv /sdcard/ (copy to internal storage)")
 print(f"{cy}3.{lg} Or use SCP to transfer over network")
 
-# Properly disconnect before launching adder.py
+# Properly disconnect
 try:
     client.disconnect()
 except:
     pass
-
-# Add delay to ensure clean handoff
-sleep(2)
-
-# Launch adder.py
-try:
-    subprocess.run([sys.executable, "adder.py"])
-except Exception as e:
-    print(f"{error} Failed to launch adder.py: {str(e)}")
