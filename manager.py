@@ -8,6 +8,7 @@ from colorama import init, Fore
 import os
 import random
 from time import sleep
+from bs4 import BeautifulSoup
 
 # Initialize colorama
 init()
@@ -25,7 +26,7 @@ def banner():
     f = pyfiglet.Figlet(font='slant')
     banner = f.renderText('Telegram')
     print(f'{random.choice(colors)}{banner}{n}')
-    print(r + '  Version: 2.0 | Author: PrinceMxMx' + n + '\n')
+    print(r + '  Version: 2.4 | Author: PrinceMxMx' + n + '\n')
 
 def clr():
     if os.name == 'nt':
@@ -33,14 +34,98 @@ def clr():
     else:
         os.system('clear')
 
+def extract_api_credentials():
+    clr()
+    banner()
+    print(lg + '[+] Automated API Credential Extraction\n' + n)
+    
+    try:
+        phone = input(f"{r}[{lg}+{r}] {lg}Enter your number with country code [Ex: +9812345678]: {r}")
+        
+        with requests.Session() as req:
+            # Send phone number
+            login0 = req.post('https://my.telegram.org/auth/send_password', data={'phone': phone})
+
+            if 'Sorry, too many tries. Please try again later.' in login0.text:
+                print(f'{r}[!] Your account has been temporarily banned! Try again later.{n}')
+                input(f'\n{lg}Press enter to continue...{n}')
+                return
+
+            if not login0.json().get('random_hash'):
+                print(f'{r}[!] Failed to send code. Check your phone number.{n}')
+                input(f'\n{lg}Press enter to continue...{n}')
+                return
+
+            random_hash = login0.json()['random_hash']
+            
+            # Get verification code
+            code = input(f'{r}[{lg}+{r}] {lg}Enter the code sent to your Telegram: {r}')
+            
+            # Login with code
+            login_data = {
+                'phone': phone,
+                'random_hash': random_hash,
+                'password': code
+            }
+            
+            login = req.post('https://my.telegram.org/auth/login', data=login_data)
+            
+            if 'true' not in login.text:
+                print(f'{r}[!] Invalid verification code{n}')
+                input(f'\n{lg}Press enter to continue...{n}')
+                return
+            
+            # Get apps page
+            apps_page = req.get('https://my.telegram.org/apps')
+            soup = BeautifulSoup(apps_page.text, 'html.parser')
+            
+            try:
+                # Extract API credentials
+                api_id = soup.find('label', string='App api_id:').find_next_sibling('div').select_one('span').get_text()
+                api_hash = soup.find('label', string='App api_hash:').find_next_sibling('div').select_one('span').get_text()
+                
+                # Extract additional info
+                try:
+                    key = soup.find('label', string='Public keys:').find_next_sibling('div').select_one('code').get_text()
+                except:
+                    key = "Not found"
+                
+                try:
+                    pc = soup.find('label', string='Production configuration:').find_next_sibling('div').select_one('strong').get_text()
+                except:
+                    pc = "Not found"
+                
+                print(f'\n{lg}[+] Successfully extracted credentials:{n}')
+                print(f'{lg}├─ API ID: {w}{api_id}{n}')
+                print(f'{lg}├─ API Hash: {w}{api_hash}{n}')
+                print(f'{lg}├─ Public Key: {w}{key[:20]}...{n}')
+                print(f'{lg}└─ Production Config: {w}{pc[:30]}...{n}')
+                
+                # Save to vars.txt
+                save = input(f'\n{lg}Do you want to save these credentials? (y/n): {r}').lower()
+                if save == 'y':
+                    with open('vars.txt', 'ab') as f:
+                        pickle.dump([int(api_id), api_hash, phone], f)
+                    print(f'\n{lg}[+] Credentials saved to vars.txt!{n}')
+                
+            except Exception as e:
+                print(f'{r}[!] Failed to extract credentials. You may need to create an app first.{n}')
+                print(f'{r}Error: {str(e)}{n}')
+                
+    except Exception as e:
+        print(f'{r}[!] Error: {str(e)}{n}')
+    
+    input(f'\n{lg}Press enter to continue...{n}')
+
 while True:
     clr()
     banner()
     print(lg + '[1] Add new accounts' + n)
-    print(lg + '[2] Filter all banned accounts' + n)
-    print(lg + '[3] List out all the accounts' + n)
-    print(lg + '[4] Delete specific accounts' + n)
-    print(r + '[5] Exit' + n)
+    print(lg + '[2] Extract API credentials automatically' + n)  # Moved to position 2
+    print(lg + '[3] Filter all banned accounts' + n)
+    print(lg + '[4] List out all the accounts' + n)
+    print(lg + '[5] Delete specific accounts' + n)
+    print(r + '[6] Exit' + n)
     
     try:
         a = int(input(f'\nEnter your choice: {r}'))
@@ -78,7 +163,10 @@ while True:
                 except Exception as e:
                     print(f'{r}[!] Error: {str(e)}')
 
-    elif a == 2:
+    elif a == 2:  # Now the API extraction is option 2
+        extract_api_credentials()
+
+    elif a == 3:  # Previously option 2, now option 3
         accounts = []
         banned_accs = []
         try:
@@ -125,7 +213,7 @@ while True:
             print(f'{r}[!] Error: {str(e)}')
             sleep(2)
 
-    elif a == 3:
+    elif a == 4:  # Previously option 3, now option 4
         try:
             with open('vars.txt', 'rb') as f:
                 accounts = []
@@ -149,7 +237,7 @@ while True:
             print(f'{r}[!] Error: {str(e)}')
             sleep(2)
 
-    elif a == 4:
+    elif a == 5:  # Previously option 4, now option 5
         try:
             with open('vars.txt', 'rb') as f:
                 accounts = []
@@ -191,10 +279,10 @@ while True:
             print(f'{r}[!] Error: {str(e)}')
             sleep(2)
 
-    elif a == 5:
+    elif a == 6:
         print(lg + '\nExiting... Goodbye!' + n)
         sleep(1)
         sys.exit(0)
     else:
-        print(r + '[!] Invalid choice! (1-5 only)' + n)
+        print(r + '[!] Invalid choice! (1-6 only)' + n)
         sleep(2)
