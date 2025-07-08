@@ -26,7 +26,7 @@ def banner():
     f = pyfiglet.Figlet(font='slant')
     banner = f.renderText('Telegram')
     print(f'{random.choice(colors)}{banner}{n}')
-    print(r + '  Version: 2.0 | Author: PrinceMxMx' + n + '\n')
+    print(r + '  Version: 2.0 | Author: @iCloudMxMx' + n + '\n')
 
 def clr():
     if os.name == 'nt':
