@@ -101,7 +101,7 @@ time.sleep(2)
 
 # Group joining
 print(f'{plus}{lg} Enter the exact username of the public group{w}[Without @]')
-g = input(f'{INPUT}{lg} Username[Eg: Techmedies_Hub]: {r}')
+g = input(f'{INPUT}{lg} Username[Eg: iunlock1]: {r}')
 group = str(g)  # Removed 't.me/' prefix as per your requested format
 
 print(f'{info}{lg} Joining from all accounts...{rs}')
@@ -178,8 +178,8 @@ time.sleep(2)
 clr()
 
 # Launch usradder.py
-print(f'\n{info}{r} This will be fully automated.')
-print(f'{info}{r} Don\'t touch the device until all processes complete')
+print(f'\n{info}{w} 🤖 This will be fully automated.')
+print(f'{info}{cy} ☕ Sit back, cup of coffee in hand, and let the magic happen effortlessly.')
 input(f'\n{plus}{lg} Press enter to continue...{rs}')
 print(f'\n{info}{lg} Launching from {len(selected_accounts)} accounts...{rs}\n')
 
