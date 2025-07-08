@@ -50,7 +50,7 @@ def show_banner():
     print(logo)
     print(f'{info}{g} Multi-Account Group Adder V2.0 {rs}')
     print(f'{info}{g} Author: t.me/iCloudMxMx {rs}')
-    print(f'{info}{cy} Features: Smart Rotation | Proxy Support | Anti-Flood{rs}\n')
+    print(f'{info}{cy} Features: Smart Rotation | Proxy Support | Premium Account Detector | Anti-Flood{rs}\n')
 
 clear_screen = lambda: os.system('cls' if os.name == 'nt' else 'clear')
 
