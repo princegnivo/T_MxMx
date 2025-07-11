@@ -21,10 +21,11 @@ import re
 from datetime import datetime
 import socket
 import asyncio
+import aiohttp
 
 init()
 
-# Configuration
+# Enhanced Configuration
 ACCOUNT_SWITCH_THRESHOLD = 15
 MAX_FLOOD_ERRORS = 2
 MAX_SUCCESSFUL_ADDS = 50
@@ -32,8 +33,10 @@ CRITICAL_WAIT_TIME = 1800
 MIN_DELAY = 8
 MAX_DELAY = 25
 PROXY_TEST_TIMEOUT = 5
-MAX_RETRIES = 3  # Max retries for participant checks
-CHANNEL_VALIDATION_RETRIES = 2  # Retries for channel validation
+MAX_RETRIES = 3
+CHANNEL_VALIDATION_RETRIES = 2
+PROXY_REFRESH_INTERVAL = 30  # Minutes between proxy refreshes
+PROXY_ROTATION_COUNT = 10  # Rotate proxy after adding this many members
 
 # Color setup
 r, g, rs, w, cy, ye = Fore.RED, Fore.GREEN, Fore.RESET, Fore.WHITE, Fore.CYAN, Fore.YELLOW
@@ -48,9 +51,9 @@ def show_banner():
     f = pyfiglet.Figlet(font='slant')
     logo = random.choice(colors) + f.renderText('Telegram') + rs
     print(logo)
-    print(f'{info}{g} Multi-Account Group Adder V2.0 {rs}')
+    print(f'{info}{g} Multi-Account Group Adder V2.2 {rs}')
     print(f'{info}{g} Author: t.me/iCloudMxMx {rs}')
-    print(f'{info}{cy} Features: Smart Rotation | Proxy Support | Premium Account Detector | Anti-Flood{rs}\n')
+    print(f'{info}{cy} Features: Smart Proxy Rotation | MTProto Support | Premium Detection | Anti-Flood{rs}\n')
 
 clear_screen = lambda: os.system('cls' if os.name == 'nt' else 'clear')
 
@@ -65,6 +68,146 @@ def countdown_timer(seconds):
 clear_screen()
 show_banner()
 
+class ProxyManager:
+    def __init__(self):
+        self.proxies = []
+        self.current_proxy = None
+        self.last_refresh = None
+        self.proxy_usage_count = 0
+    
+    async def fetch_proxies_from_channel(self, client):
+        """Enhanced proxy fetching with robust parsing"""
+        try:
+            print(f'{info} Fetching fresh proxies from @ProxyMTProto')
+            channel = await client.get_entity("https://t.me/ProxyMTProto")
+            messages = await client.get_messages(channel, limit=50)
+            
+            new_proxies = []
+            proxy_pattern = re.compile(
+                r'(?:Server|Host|IP|Адрес)[:\s]*(.*?)\n'
+                r'(?:Port|Порт)[:\s]*([0-9]{1,5}|`[0-9]{1,5}`)\n'
+                r'(?:Secret|Ключ|Секрет)[:\s]*(.*?)(?:\n|$)',
+                re.IGNORECASE
+            )
+            
+            for msg in messages:
+                if msg.text:
+                    matches = proxy_pattern.finditer(msg.text)
+                    for match in matches:
+                        try:
+                            port = self.parse_proxy_port(match.group(2))
+                            if not port:
+                                continue
+                                
+                            proxy = {
+                                'server': match.group(1).strip(),
+                                'port': port,
+                                'secret': match.group(3).strip()
+                            }
+                            
+                            if all(proxy.values()):  # Ensure no empty values
+                                new_proxies.append(proxy)
+                        except (ValueError, AttributeError, IndexError) as e:
+                            continue
+            
+            # Remove duplicates
+            unique_proxies = []
+            seen = set()
+            for p in new_proxies:
+                key = (p['server'], p['port'])
+                if key not in seen:
+                    seen.add(key)
+                    unique_proxies.append(p)
+            
+            self.proxies = unique_proxies
+            self.last_refresh = datetime.now()
+            self.save_proxies()
+            print(f'{info} Found {len(self.proxies)} fresh proxies')
+            return True
+            
+        except Exception as e:
+            print(f'{error} Failed to fetch proxies: {str(e)}')
+            return False
+    
+    def parse_proxy_port(self, port_str):
+        """Safe port number parsing that handles backticks and other formatting"""
+        try:
+            # Remove all non-numeric characters
+            clean_port = re.sub(r'[^0-9]', '', port_str)
+            if not clean_port:
+                return None
+                
+            port = int(clean_port)
+            return port if 1 <= port <= 65535 else None
+        except ValueError:
+            return None
+    
+    def load_proxies(self):
+        """Load proxies from JSON file"""
+        try:
+            with open('proxy_list.json') as f:
+                self.proxies = json.load(f)
+                self.last_refresh = datetime.now()
+                print(f'{info} Loaded {len(self.proxies)} proxies from file')
+                return True
+        except Exception:
+            return False
+    
+    def save_proxies(self):
+        """Save proxies to JSON file"""
+        try:
+            with open('proxy_list.json', 'w') as f:
+                json.dump(self.proxies, f, indent=2)
+        except Exception as e:
+            print(f'{error} Failed to save proxies: {str(e)}')
+    
+    async def get_next_proxy(self):
+        """Get the next working proxy with intelligent selection"""
+        # Rotate if we've used current proxy enough times
+        if self.proxy_usage_count >= PROXY_ROTATION_COUNT:
+            self.proxy_usage_count = 0
+            self.current_proxy = None
+        
+        # Return current proxy if still valid
+        if self.current_proxy and await self.test_proxy(self.current_proxy):
+            self.proxy_usage_count += 1
+            return self.current_proxy
+        
+        # Check if we need to refresh proxies
+        if (not self.proxies or 
+            (datetime.now() - self.last_refresh).total_seconds() > PROXY_REFRESH_INTERVAL * 60):
+            if not self.load_proxies():
+                return None
+        
+        # Test random proxies until we find a working one
+        tested_proxies = set()
+        while len(tested_proxies) < len(self.proxies):
+            proxy = random.choice(self.proxies)
+            if tuple(proxy.items()) in tested_proxies:
+                continue
+            tested_proxies.add(tuple(proxy.items()))
+            
+            if await self.test_proxy(proxy):
+                self.current_proxy = proxy
+                self.proxy_usage_count = 1
+                return proxy
+        
+        return None
+    
+    async def test_proxy(self, proxy):
+        """Test if proxy is working"""
+        try:
+            # Test TCP connection first
+            reader, writer = await asyncio.wait_for(
+                asyncio.open_connection(proxy['server'], proxy['port']),
+                timeout=PROXY_TEST_TIMEOUT
+            )
+            writer.close()
+            await writer.wait_closed()
+            return True
+        except Exception:
+            return False
+
 class AccountManager:
     def __init__(self, group_link):
         self.accounts = []
@@ -72,36 +215,10 @@ class AccountManager:
         self.action_count = 0
         self.flood_errors = 0
         self.successful_adds = 0
-        self.proxies = self.load_proxies()
-        self.current_proxy = None
+        self.proxy_manager = ProxyManager()
         self.group_entity = None
         self.target_group = None
         self.group_link = group_link
-    
-    def load_proxies(self):
-        try:
-            with open('proxy_list.json') as f:
-                proxies = json.load(f)
-                return [p for p in proxies if all(k in p for k in ['server', 'port'])]
-        except Exception:
-            return []
-    
-    def get_next_proxy(self):
-        if not self.proxies:
-            return None
-        
-        for proxy in random.sample(self.proxies, len(self.proxies)):
-            try:
-                sock = socket.create_connection(
-                    (proxy['server'], proxy['port']), 
-                    timeout=PROXY_TEST_TIMEOUT
-                )
-                sock.close()
-                self.current_proxy = proxy
-                return proxy
-            except Exception:
-                continue
-        return None
     
     def add_account(self, phone, api_id, api_hash):
         self.accounts.append({
@@ -146,7 +263,7 @@ class AccountManager:
                 
             time.sleep(random.uniform(1, 3))
             
-            proxy = self.get_next_proxy()
+            proxy = await self.proxy_manager.get_next_proxy()
             if await self.setup_client(self.get_current_account(), proxy):
                 print(f'{info}{cy} Switched to {self.get_current_account()["phone"]}{rs}')
                 return True
@@ -158,7 +275,13 @@ class AccountManager:
         try:
             proxy_config = None
             if proxy:
-                proxy_config = (proxy['server'], proxy['port'])
+                # Enhanced MTProto proxy configuration
+                proxy_config = {
+                    'proxy_type': 'mtproto',
+                    'addr': proxy['server'],
+                    'port': proxy['port'],
+                    'secret': proxy.get('secret', '')
+                }
             
             client = TelegramClient(
                 f'sessions/{account["phone"]}',
@@ -182,6 +305,11 @@ class AccountManager:
             account['client'] = client
             account['last_active'] = datetime.now()
             account['is_active'] = True
+            
+            # Fetch fresh proxies on first setup
+            if not self.proxy_manager.proxies:
+                await self.proxy_manager.fetch_proxies_from_channel(client)
+            
             return True
             
         except Exception as e:
@@ -264,7 +392,7 @@ async def main():
             return
 
     # Initialize first account and set up group entity
-    if not await account_manager.setup_client(account_manager.get_current_account(), account_manager.get_next_proxy()):
+    if not await account_manager.setup_client(account_manager.get_current_account()):
         print(f'{error} First account initialization failed!')
         return
 
@@ -386,60 +514,4 @@ async def main():
                 account_manager.action_count += 1
                 account_manager.successful_adds += 1
                 current_account['added_count'] += 1
-                print(f'{attempt}{g} Success! (Total: {account_manager.successful_adds}/{MAX_SUCCESSFUL_ADDS}){rs}')
-            except Exception as e:
-                print(f'{error} Failed to add {user["username"]}: {str(e)}')
-                stats['fail'] += 1
-                current_account['errors'] += 1
-                
-                if "database is locked" in str(e):
-                    print(f'{error} Database is locked. Attempting to rotate account.')
-                    if await account_manager.rotate_account("Database locked"):
-                        continue
-                
-                if "Invalid channel object" in str(e) or "ChannelInvalidError" in str(e):
-                    print(f'{error} Invalid channel object for {user["username"]}. Skipping.')
-                    continue
-                
-                if "auth" in str(e).lower() or "session" in str(e).lower():
-                    print(f'{error} CRITICAL ERROR: Rotating account')
-                    if await account_manager.rotate_account("Authentication error"):
-                        continue
-        
-        except PeerFloodError as e:
-            stats['fail'] += 1
-            current_account['errors'] += 1
-            if await account_manager.handle_flood_error(str(e)):
-                continue
-            countdown_timer(300)
-            
-        except UserPrivacyRestrictedError:
-            print(f'{error} Privacy restriction for {user["username"]}')
-            stats['fail'] += 1
-            current_account['errors'] += 1
-
-    # Final report
-    duration = datetime.now() - start_time
-    print(f'\n{info}{g} {"="*60}{rs}')
-    print(f'{info}{g} OPERATION COMPLETE:{rs}')
-    print(f'{info}{g} {"-"*60}{rs}')
-    print(f'{attempt}{g} Successes: {stats["success"]} ({stats["success"]/len(users):.1%}){rs}')
-    print(f'{sleep}{cy} Skipped: {stats["skip"]} (existing){rs}')
-    print(f'{sleep}{ye} Invalid: {stats["invalid"]} (bad usernames){rs}')
-    print(f'{error}{r} Failures: {stats["fail"]}{rs}')
-    print(f'{info}{g} Processed: {len(users)}{rs}')
-    print(f'{info}{g} Duration: {duration}{rs}')
-    print(f'{info}{g} Accounts used: {len([acc for acc in account_manager.accounts if acc["added_count"] > 0])}/{len(account_manager.accounts)}{rs}')
-    print(f'{info}{g} Proxy usage: {account_manager.current_proxy["server"] if account_manager.current_proxy else "None"}{rs}')
-    print(f'{info}{g} {"="*60}{rs}')
-
-    # Cleanup
-    for acc in account_manager.accounts:
-        if acc.get('client'):
-            try:
-                await acc['client'].disconnect()
-            except:
-                pass
-
-if __name__ == '__main__':
-    asyncio.run(main())
+                print(f'{attempt}{g} Suc
