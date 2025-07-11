@@ -514,4 +514,61 @@ async def main():
                 account_manager.action_count += 1
                 account_manager.successful_adds += 1
                 current_account['added_count'] += 1
-                print(f'{attempt}{g} Suc
+                print(f'{attempt}{g} Success! (Total: {account_manager.successful_adds}/{MAX_SUCCESSFUL_ADDS}){rs}')
+            except Exception as e:
+                print(f'{error} Failed to add {user["username"]}: {str(e)}')
+                stats['fail'] += 1
+                current_account['errors'] += 1
+                
+                if "database is locked" in str(e):
+                    print(f'{error} Database is locked. Attempting to rotate account.')
+                    if await account_manager.rotate_account("Database locked"):
+                        continue
+                
+                if "Invalid channel object" in str(e) or "ChannelInvalidError" in str(e):
+                    print(f'{error} Invalid channel object for {user["username"]}. Skipping.')
+                    continue
+                
+                if "auth" in str(e).lower() or "session" in str(e).lower():
+                    print(f'{error} CRITICAL ERROR: Rotating account')
+                    if await account_manager.rotate_account("Authentication error"):
+                        continue
+        
+        except PeerFloodError as e:
+            stats['fail'] += 1
+            current_account['errors'] += 1
+            if await account_manager.handle_flood_error(str(e)):
+                continue
+            countdown_timer(300)
+            
+        except UserPrivacyRestrictedError:
+            print(f'{error} Privacy restriction for {user["username"]}')
+            stats['fail'] += 1
+            current_account['errors'] += 1
+
+    # Final report
+    duration = datetime.now() - start_time
+    print(f'\n{info}{g} {"="*60}{rs}')
+    print(f'{info}{g} OPERATION COMPLETE:{rs}')
+    print(f'{info}{g} {"-"*60}{rs}')
+    print(f'{attempt}{g} Successes: {stats["success"]} ({stats["success"]/len(users):.1%}){rs}')
+    print(f'{sleep}{cy} Skipped: {stats["skip"]} (existing){rs}')
+    print(f'{sleep}{ye} Invalid: {stats["invalid"]} (bad usernames){rs}')
+    print(f'{error}{r} Failures: {stats["fail"]}{rs}')
+    print(f'{info}{g} Processed: {len(users)}{rs}')
+    print(f'{info}{g} Duration: {duration}{rs}')
+    print(f'{info}{g} Accounts used: {len([acc for acc in account_manager.accounts if acc["added_count"] > 0])}/{len(account_manager.accounts)}{rs}')
+    current_proxy = account_manager.proxy_manager.current_proxy
+    print(f'{info}{g} Proxy usage: {current_proxy["server"] if current_proxy else "None"}{rs}')
+    print(f'{info}{g} {"="*60}{rs}')
+
+    # Cleanup
+    for acc in account_manager.accounts:
+        if acc.get('client'):
+            try:
+                await acc['client'].disconnect()
+            except:
+                pass
+
+if __name__ == '__main__':
+    asyncio.run(main())
