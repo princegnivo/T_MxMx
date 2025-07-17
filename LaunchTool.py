@@ -112,7 +112,7 @@ def main_menu():
         print(f"{lg}[2] Member Scraper")
         print(f"{lg}[3] Contact Adder")
         print(f"{lg}[4] Settings")
-        print(f"{lg}[5] Exit{rs}")
+        print(f"{r}[5] Exit{rs}")
         
         choice = input(f"\n{INPUT} Select option [1-5]: {rs}").strip()
         
