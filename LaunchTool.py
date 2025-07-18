@@ -1,170 +1,86 @@
 #!/usr/bin/env python3
 import os
-import time
-import random
 import sys
 import subprocess
-import threading
 import pyfiglet
 from colorama import init, Fore, Style
 
 # Initialize colorama
 init(autoreset=True)
 
-# ===== COLOR DEFINITIONS =====
+# Color definitions
 r = Fore.RED
 g = Fore.GREEN
-b = Fore.BLUE
-y = Fore.YELLOW
-m = Fore.MAGENTA
-c = Fore.CYAN
 w = Fore.WHITE
-lg = Fore.LIGHTGREEN_EX
-ly = Fore.LIGHTYELLOW_EX
-lm = Fore.LIGHTMAGENTA_EX
-lc = Fore.LIGHTCYAN_EX
-lr = Fore.LIGHTRED_EX
-lb = Fore.LIGHTBLUE_EX
-rs = Style.RESET_ALL
+ye = Fore.YELLOW
+cy = Fore.CYAN
+colors = [r, g, w, ye, cy]
 
-# Rainbow colors for animations
-rainbow = [r, g, b, y, m, c, lg, ly, lm, lc, lr, lb]
-
-# ===== UI ELEMENTS =====
-info = lg + '(' + w + 'i' + lg + ')' + rs
-error = lg + '(' + r + '!' + lg + ')' + rs
-success = w + '(' + lg + '+' + w + ')' + rs
-INPUT = lg + '(' + c + '~' + lg + ')' + rs
+def color_text(text, color):
+    return f"{color}{text}{Style.RESET_ALL}"
 
 def clear_screen():
     os.system('cls' if os.name == 'nt' else 'clear')
 
-def run_script(script_name):
-    """Launch script directly and exit"""
+def show_logo():
+    """Display the Telegram logo"""
     try:
-        print(f"\n{success} Launching {script_name}...{rs}")
-        subprocess.run(['python', script_name], check=True)
-        sys.exit(0)  # Exit after completion
-    except subprocess.CalledProcessError as e:
-        print(f"{error} {script_name} failed with exit code {e.returncode}{rs}")
-        sys.exit(1)
-    except Exception as e:
-        print(f"{error} Failed to launch {script_name}: {e}{rs}")
-        sys.exit(1)
-
-def animate_text(text, delay=0.05):
-    """Animated text display with rainbow colors"""
-    for char in text:
-        color = random.choice(rainbow)
-        sys.stdout.write(color + char)
-        sys.stdout.flush()
-        time.sleep(delay)
-    print()
-
-def loading_animation(duration=2):
-    """Loading spinner animation"""
-    symbols = ['⣾', '⣽', '⣻', '⢿', '⡿', '⣟', '⣯', '⣷']
-    end_time = time.time() + duration
-    while time.time() < end_time:
-        for symbol in symbols:
-            color = random.choice(rainbow)
-            sys.stdout.write(f"\r{color}Loading {symbol} {rs}")
-            sys.stdout.flush()
-            time.sleep(0.1)
-    print()
-
-def banner():
-    """Display ASCII art banner"""
-    try:
-        f = pyfiglet.Figlet(font='slant')
-        logo = f.renderText('Telegram')
-        
-        colored_logo = []
-        for i, line in enumerate(logo.split('\n')):
-            color = rainbow[i % len(rainbow)]
-            colored_logo.append(color + line)
-        print('\n'.join(colored_logo))
+        logo = pyfiglet.Figlet(font='slant').renderText('Telegram')
+        print(color_text(logo, g))  # Green logo as requested
     except:
-        print(f"{lg}=== Telegram Tools ==={rs}")
-    
-    print(f"  {r}Version: {w}2.0 {r}| Author: {w}@iCloudMxMx{rs}")
-    print(f"  {r}Build: {w}Premium {r}| Status: {lg}Stable{rs}\n")
+        print(color_text("=== TelegramPremiumTools ===", g))
 
-def welcome_message():
-    """Display welcome sequence"""
-    messages = [
-        f"{lg}Welcome to Telegram Premium Tools{rs}",
-        f"{lc}Professional automation suite{rs}",
-        f"{lb}Secure • Private • Efficient{rs}"
-    ]
-    
-    for msg in messages:
-        print(msg)
-        time.sleep(0.7)
+def run_script(script_name):
+    """Launch script and return to menu"""
+    try:
+        print(color_text(f"\nLaunching {script_name}...", g))
+        subprocess.run(['python', script_name], check=True)
+    except subprocess.CalledProcessError:
+        print(color_text(f"\n{script_name} failed to execute properly", r))
+    except Exception as e:
+        print(color_text(f"\nError: {e}", r))
+    input(color_text("\nPress Enter to return to menu...", cy))
+    clear_screen()
 
 def main_menu():
     """Main menu interface"""
     while True:
         clear_screen()
-        banner()
+        show_logo()
+        print(color_text("  Version: 2.0 | Author: PrinceMxMx\n", w))
         
-        print(f"{lg}[1] Account Manager")
-        print(f"{lg}[2] Member Scraper")
-        print(f"{lg}[3] Contact Adder")
-        print(f"{lg}[4] Settings")
-        print(f"{r}[5] Exit{rs}")
+        print(color_text("[1] Account Manager", ye))
+        print(color_text("[2] Member Scraper", ye))
+        print(color_text("[3] Contact Adder", ye))
+        print(color_text("[4] Exit", r))
         
-        choice = input(f"\n{INPUT} Select option [1-5]: {rs}").strip()
+        choice = input(color_text("\nSelect option [1-4]: ", cy)).strip()
         
         if choice == '1':
             run_script("manager.py")
         elif choice == '2':
             run_script("scraper.py")
         elif choice == '3':
-            run_script("adder.py")
+            print(color_text("\nLaunching Contact Adder...", g))
+            subprocess.run(['python', 'adder.py'], check=True)
+            sys.exit(0)
         elif choice == '4':
-            print(f"\n{info} Settings panel would appear here")
-            input(f"{INPUT} Press Enter to continue...{rs}")
-        elif choice == '5':
-            print(f"\n{info} {ly}Thank you for using Telegram Premium Tools!{rs}")
-            time.sleep(1)
+            print(color_text("\nExiting Telegram Tools...", r))
             sys.exit(0)
         else:
-            print(f"\n{error} Invalid selection!{rs}")
-            time.sleep(1)
-
-def main():
-    """Main application entry point"""
-    loading_animation()
-    clear_screen()
-    banner()
-    welcome_message()
-    
-    print(f"\n{info} {ly}Initializing components...{rs}")
-    print(f"{success} {lg}Core systems ready{rs}")
-    print(f"{info} Python {sys.version.split()[0]} detected{rs}")
-    
-    input(f"\n{INPUT} Press Enter to continue...{rs}")
-    
-    print(f"\n{lg}Loading modules{rs}", end='')
-    for _ in range(3):
-        print(f"{random.choice(rainbow)}✦{rs}", end='', flush=True)
-        time.sleep(0.3)
-    
-    print(f"\n\n{ly}Initialization complete!{rs}\n")
-    time.sleep(1)
-    
-    main_menu()
+            print(color_text("\nInvalid selection!", r))
+            input(color_text("Press Enter to continue...", cy))
+            clear_screen()
 
 if __name__ == "__main__":
     try:
         # Create required directories
         os.makedirs("members", exist_ok=True)
-        
-        main()
+        clear_screen()
+        main_menu()
     except KeyboardInterrupt:
-        print(f"\n{error} Script interrupted by user{rs}")
+        print(color_text("\nScript interrupted by user", r))
         sys.exit(1)
     except Exception as e:
-        print(f"\n{error} Fatal error: {e}{rs}")
+        print(color_text(f"\nFatal error: {e}", r))
         sys.exit(1)
