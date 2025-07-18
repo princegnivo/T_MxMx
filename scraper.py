@@ -52,7 +52,7 @@ def clear_screen():
 
 clear_screen()
 banner()
-print(f'  {r}Version: {w}2.0 {r}| Author: {w}@iCloudMxMx{rs}\n')
+print(f'  {r}Version: {w}2.0 {r}| Author: {w}t.me/iCloudMxMx{rs}\n')
 
 # Check and create necessary directories
 os.makedirs('sessions', exist_ok=True)
