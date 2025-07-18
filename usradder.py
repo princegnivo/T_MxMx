@@ -19,7 +19,6 @@ from colorama import init, Fore
 import os
 import re
 from datetime import datetime
-import socket
 import asyncio
 
 init()
@@ -29,12 +28,10 @@ ACCOUNT_SWITCH_THRESHOLD = 15
 MAX_FLOOD_ERRORS = 2
 MAX_SUCCESSFUL_ADDS = 50
 CRITICAL_WAIT_TIME = 1800
-MIN_DELAY = 8
-MAX_DELAY = 25
-PROXY_TEST_TIMEOUT = 5
+MIN_DELAY = 1  # Changed from 8 to 1
+MAX_DELAY = 5  # Changed from 25 to 5
 MAX_RETRIES = 3  # Max retries for participant checks
 CHANNEL_VALIDATION_RETRIES = 2  # Retries for channel validation
-PROXY_REFRESH_INTERVAL = 30  # Minutes between proxy refreshes
 
 # Color setup
 r, g, rs, w, cy, ye = Fore.RED, Fore.GREEN, Fore.RESET, Fore.WHITE, Fore.CYAN, Fore.YELLOW
@@ -51,7 +48,7 @@ def show_banner():
     print(logo)
     print(f'{info}{g} Multi-Account Group Adder V2.0 {rs}')
     print(f'{info}{g} Author: t.me/iCloudMxMx {rs}')
-    print(f'{info}{cy} Features: Smart Rotation | Proxy Support | Premium Account Detector | Anti-Flood{rs}\n')
+    print(f'{info}{cy} Features: Smart Rotation | Premium Account Detector | Anti-Flood{rs}\n')
 
 clear_screen = lambda: os.system('cls' if os.name == 'nt' else 'clear')
 
@@ -73,73 +70,9 @@ class AccountManager:
         self.action_count = 0
         self.flood_errors = 0
         self.successful_adds = 0
-        self.proxies = []
-        self.current_proxy = None
         self.group_entity = None
         self.target_group = None
         self.group_link = group_link
-        self.last_proxy_refresh = datetime.now()
-    
-    def load_proxies(self, force_refresh=False):
-        """Load proxies from file with caching and force refresh option"""
-        try:
-            # Only refresh if forced or if cache is stale
-            if force_refresh or (datetime.now() - self.last_proxy_refresh).total_seconds() > (PROXY_REFRESH_INTERVAL * 60):
-                with open('proxy_list.json') as f:
-                    new_proxies = json.load(f)
-                    self.proxies = [p for p in new_proxies if all(k in p for k in ['server', 'port'])]
-                    self.last_proxy_refresh = datetime.now()
-                    print(f'{info} Loaded {len(self.proxies)} proxies')
-        except Exception as e:
-            print(f'{error} Proxy load error: {str(e)}')
-            self.proxies = []
-    
-    def get_next_proxy(self):
-        """Get the next working proxy with intelligent selection"""
-        if not self.proxies:
-            self.load_proxies()
-            if not self.proxies:
-                return None
-        
-        # Try last working proxy first if available
-        if self.current_proxy:
-            try:
-                sock = socket.create_connection(
-                    (self.current_proxy['server'], self.current_proxy['port']), 
-                    timeout=PROXY_TEST_TIMEOUT
-                )
-                sock.close()
-                return self.current_proxy
-            except Exception:
-                pass
-        
-        # Test random proxies until we find a working one
-        tested_proxies = set()
-        while len(tested_proxies) < len(self.proxies):
-            proxy = random.choice(self.proxies)
-            if proxy in tested_proxies:
-                continue
-            tested_proxies.add(proxy)
-            
-            try:
-                sock = socket.create_connection(
-                    (proxy['server'], proxy['port']), 
-                    timeout=PROXY_TEST_TIMEOUT
-                )
-                sock.close()
-                self.current_proxy = proxy
-                return proxy
-            except Exception:
-                continue
-        
-        # If no proxies worked, refresh the list and try one more time
-        self.load_proxies(force_refresh=True)
-        if self.proxies:
-            proxy = random.choice(self.proxies)
-            self.current_proxy = proxy  # Return it even if untested
-            return proxy
-        
-        return None
     
     def add_account(self, phone, api_id, api_hash):
         self.accounts.append({
@@ -184,36 +117,19 @@ class AccountManager:
                 
             time.sleep(random.uniform(1, 3))
             
-            proxy = self.get_next_proxy()
-            if await self.setup_client(self.get_current_account(), proxy):
+            if await self.setup_client(self.get_current_account()):
                 print(f'{info}{cy} Switched to {self.get_current_account()["phone"]}{rs}')
                 return True
         
         print(f'{error} All accounts exhausted or inactive{rs}')
         return False
     
-    async def setup_client(self, account, proxy=None):
+    async def setup_client(self, account):
         try:
-            proxy_config = None
-            if proxy:
-                # Enhanced proxy configuration with authentication if available
-                if 'username' in proxy and 'password' in proxy:
-                    proxy_config = {
-                        'proxy_type': 'socks5',  # Assuming SOCKS5 as most common
-                        'addr': proxy['server'],
-                        'port': proxy['port'],
-                        'username': proxy.get('username'),
-                        'password': proxy.get('password'),
-                        'rdns': True
-                    }
-                else:
-                    proxy_config = (proxy['server'], proxy['port'])
-            
             client = TelegramClient(
                 f'sessions/{account["phone"]}',
                 account['api_id'],
-                account['api_hash'],
-                proxy=proxy_config
+                account['api_hash']
             )
             await client.connect()
             
@@ -313,7 +229,7 @@ async def main():
             return
 
     # Initialize first account and set up group entity
-    if not await account_manager.setup_client(account_manager.get_current_account(), account_manager.get_next_proxy()):
+    if not await account_manager.setup_client(account_manager.get_current_account()):
         print(f'{error} First account initialization failed!')
         return
 
@@ -479,7 +395,6 @@ async def main():
     print(f'{info}{g} Processed: {len(users)}{rs}')
     print(f'{info}{g} Duration: {duration}{rs}')
     print(f'{info}{g} Accounts used: {len([acc for acc in account_manager.accounts if acc["added_count"] > 0])}/{len(account_manager.accounts)}{rs}')
-    print(f'{info}{g} Proxy usage: {account_manager.current_proxy["server"] if account_manager.current_proxy else "None"}{rs}')
     print(f'{info}{g} {"="*60}{rs}')
 
     # Cleanup
